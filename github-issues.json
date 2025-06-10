@@ -1,0 +1,154 @@
+{
+  "issues": [
+    {
+      "title": "Add offline mode support for cached content",
+      "body": "## Description\nImplement an offline mode that allows the MCP server to work without internet connectivity by using cached content.\n\n## Requirements\n- Detect when Apple's site is unreachable\n- Fall back to cached content gracefully\n- Provide clear feedback about offline status\n- Allow full search and browsing of cached content\n\n## Acceptance Criteria\n- [ ] Server works without internet if content is cached\n- [ ] Clear indication when using cached vs live content\n- [ ] Graceful degradation of features",
+      "labels": ["enhancement", "priority:high"],
+      "milestone": "v1.1.0"
+    },
+    {
+      "title": "Implement incremental search index updates",
+      "body": "## Description\nAdd support for incremental updates to the search index without re-indexing everything.\n\n## Requirements\n- Track last indexed timestamp for each URL\n- Only re-index changed content\n- Update search index incrementally\n- Provide webhook/cron support for automatic updates\n\n## Technical Details\n- Store content hashes to detect changes\n- Implement delta indexing algorithm\n- Add CLI command for scheduled updates",
+      "labels": ["enhancement", "performance"],
+      "milestone": "v1.1.0"
+    },
+    {
+      "title": "Add support for code syntax highlighting in responses",
+      "body": "## Description\nEnhance code examples with proper syntax highlighting for better readability.\n\n## Requirements\n- Detect language automatically\n- Support Swift, SwiftUI, Objective-C\n- Preserve formatting in MCP responses\n- Add language indicators\n\n## Implementation\n- Consider using Prism.js or similar\n- Ensure compatibility with Claude's rendering",
+      "labels": ["enhancement", "ux"],
+      "milestone": "v1.2.0"
+    },
+    {
+      "title": "Create comprehensive test suite",
+      "body": "## Description\nAdd unit and integration tests for all major components.\n\n## Test Coverage Needed\n- [ ] Parser tests with various HTML structures\n- [ ] Search engine tests with edge cases\n- [ ] Cache manager tests\n- [ ] Rate limiter tests\n- [ ] MCP protocol compliance tests\n- [ ] Error handling scenarios\n\n## Tools\n- Jest for unit tests\n- Playwright for integration tests\n- Coverage target: >80%",
+      "labels": ["testing", "priority:high"],
+      "milestone": "v1.1.0"
+    },
+    {
+      "title": "Add platform-specific search filters",
+      "body": "## Description\nEnhance search to better filter by specific Apple platforms and versions.\n\n## Features\n- Filter by iOS/macOS/watchOS/tvOS/visionOS\n- Filter by OS version (iOS 17+, macOS 14+, etc.)\n- Filter by component type (UI, Layout, Navigation)\n- Combine multiple filters\n\n## UI/UX\n- Clear filter syntax in search\n- Auto-complete for filter values\n- Show active filters in results",
+      "labels": ["enhancement", "search"],
+      "milestone": "v1.2.0"
+    },
+    {
+      "title": "Implement content change notifications",
+      "body": "## Description\nNotify users when Apple updates HIG content they've previously accessed.\n\n## Requirements\n- Track which guidelines users access\n- Monitor for content changes\n- Provide change summaries\n- Optional email/webhook notifications\n\n## Privacy\n- Make tracking opt-in\n- Store minimal data\n- Allow data deletion",
+      "labels": ["enhancement", "feature"],
+      "milestone": "v2.0.0"
+    },
+    {
+      "title": "Add multi-language support",
+      "body": "## Description\nSupport Apple's HIG in multiple languages (Japanese, Chinese, etc.).\n\n## Requirements\n- Detect available languages\n- Allow language preference setting\n- Index content in multiple languages\n- Search across languages\n\n## Challenges\n- Handling different URL structures\n- Character encoding\n- Search relevance across languages",
+      "labels": ["enhancement", "i18n"],
+      "milestone": "v2.0.0"
+    },
+    {
+      "title": "Optimize memory usage for large-scale indexing",
+      "body": "## Description\nReduce memory footprint when indexing the entire HIG documentation.\n\n## Current Issues\n- High memory usage during full indexing\n- Potential OOM errors on low-memory systems\n\n## Solutions\n- Stream processing for large documents\n- Batch index updates\n- Memory-mapped file storage\n- Garbage collection optimization",
+      "labels": ["bug", "performance", "priority:medium"],
+      "milestone": "v1.1.0"
+    },
+    {
+      "title": "Add visual asset support",
+      "body": "## Description\nImprove handling and caching of images and visual assets from HIG.\n\n## Requirements\n- Cache images locally\n- Provide image descriptions\n- Support SF Symbols references\n- Handle videos and animations\n\n## Features\n- Image optimization\n- Alt text extraction\n- Asset versioning",
+      "labels": ["enhancement", "feature"],
+      "milestone": "v1.3.0"
+    },
+    {
+      "title": "Create interactive setup wizard",
+      "body": "## Description\nBuild an interactive CLI wizard for easier setup and configuration.\n\n## Features\n- Auto-detect Claude Desktop installation\n- Guide through configuration\n- Test connection automatically\n- Troubleshoot common issues\n\n## Implementation\n- Use inquirer.js or similar\n- Add to npm scripts\n- Include diagnostic tools",
+      "labels": ["enhancement", "ux", "good-first-issue"],
+      "milestone": "v1.2.0"
+    },
+    {
+      "title": "Add request retry mechanism with exponential backoff",
+      "body": "## Description\nImplement robust retry logic for failed requests to Apple's servers.\n\n## Current Issue\nRequests can fail due to network issues or rate limiting\n\n## Solution\n- Exponential backoff with jitter\n- Maximum retry attempts\n- Different strategies for different error types\n- Circuit breaker pattern for repeated failures",
+      "labels": ["bug", "reliability"],
+      "milestone": "v1.1.0"
+    },
+    {
+      "title": "Support for design system tokens export",
+      "body": "## Description\nExport Apple's design tokens (colors, spacing, typography) in various formats.\n\n## Export Formats\n- CSS variables\n- JSON tokens\n- Figma tokens\n- Style Dictionary format\n\n## Features\n- Platform-specific tokens\n- Version tracking\n- Diff generation",
+      "labels": ["enhancement", "feature"],
+      "milestone": "v2.0.0"
+    },
+    {
+      "title": "Add MCP server health monitoring",
+      "body": "## Description\nImplement health checks and monitoring for the MCP server.\n\n## Monitoring Points\n- Cache hit rates\n- Response times\n- Error rates\n- Memory usage\n- Index freshness\n\n## Features\n- Health endpoint\n- Metrics export\n- Alerting thresholds\n- Performance dashboard",
+      "labels": ["enhancement", "monitoring"],
+      "milestone": "v1.3.0"
+    },
+    {
+      "title": "Create GitHub Action for automated testing",
+      "body": "## Description\nSet up CI/CD pipeline using GitHub Actions.\n\n## Workflow Steps\n- Run tests on PR\n- Check TypeScript compilation\n- Run linter\n- Test MCP protocol compliance\n- Build and package\n\n## Additional Features\n- Automated releases\n- NPM publishing\n- Docker image builds",
+      "labels": ["infrastructure", "testing"],
+      "milestone": "v1.1.0"
+    },
+    {
+      "title": "Document API rate limits and best practices",
+      "body": "## Description\nCreate comprehensive documentation about rate limiting and responsible usage.\n\n## Documentation Needed\n- Current rate limits\n- Best practices for crawling\n- Caching strategies\n- Legal considerations\n- Terms of service compliance\n\n## Format\n- Add to README\n- Create CONTRIBUTING.md\n- Add inline code comments",
+      "labels": ["documentation", "priority:high"],
+      "milestone": "v1.0.1"
+    },
+    {
+      "title": "Implement search query suggestions",
+      "body": "## Description\nAdd autocomplete and query suggestions to improve search UX.\n\n## Features\n- Common search terms\n- Related searches\n- Spell correction\n- Search history (optional)\n\n## Implementation\n- Build suggestion index\n- Typo correction algorithm\n- Relevance ranking",
+      "labels": ["enhancement", "search", "ux"],
+      "milestone": "v1.3.0"
+    },
+    {
+      "title": "Add support for deep linking to specific sections",
+      "body": "## Description\nEnable direct linking to specific sections within guidelines.\n\n## Requirements\n- Parse anchor links\n- Navigate to specific headings\n- Preserve context\n- Support code line numbers\n\n## Use Cases\n- Reference specific examples\n- Share precise information\n- Create bookmarks",
+      "labels": ["enhancement", "feature"],
+      "milestone": "v1.2.0"
+    },
+    {
+      "title": "Create Docker container for easy deployment",
+      "body": "## Description\nPackage the MCP server as a Docker container.\n\n## Requirements\n- Multi-stage build\n- Minimal image size\n- Pre-built with dependencies\n- Volume mounting for cache\n\n## Features\n- Docker Compose example\n- Kubernetes manifests\n- Environment configuration",
+      "labels": ["infrastructure", "deployment"],
+      "milestone": "v1.3.0"
+    },
+    {
+      "title": "Add telemetry for usage analytics",
+      "body": "## Description\nImplement optional, privacy-preserving telemetry.\n\n## Data Points\n- Most searched terms\n- Popular guidelines\n- Error patterns\n- Performance metrics\n\n## Privacy\n- Opt-in only\n- No PII collected\n- Local aggregation\n- Clear data policy",
+      "labels": ["enhancement", "analytics"],
+      "milestone": "v2.0.0"
+    },
+    {
+      "title": "Support for Apple's WWDC session references",
+      "body": "## Description\nIntegrate WWDC session videos and transcripts related to HIG topics.\n\n## Features\n- Link HIG topics to relevant WWDC sessions\n- Search WWDC transcripts\n- Extract code examples from sessions\n- Track session updates\n\n## Data Sources\n- Apple Developer videos\n- Session transcripts\n- Sample code",
+      "labels": ["enhancement", "feature", "content"],
+      "milestone": "v2.0.0"
+    },
+    {
+      "title": "Implement content diff visualization",
+      "body": "## Description\nShow what changed when Apple updates guidelines.\n\n## Features\n- Track content versions\n- Highlight changes\n- Show addition/removal/modifications\n- Change summaries\n\n## Use Cases\n- Stay updated with changes\n- Understand evolution\n- Migration guides",
+      "labels": ["enhancement", "feature"],
+      "milestone": "v2.0.0"
+    },
+    {
+      "title": "Add example project generator",
+      "body": "## Description\nGenerate sample code projects based on HIG guidelines.\n\n## Features\n- SwiftUI/UIKit templates\n- Component examples\n- Best practice implementations\n- Platform-specific projects\n\n## Integration\n- Link from guidelines\n- Customizable templates\n- Xcode project generation",
+      "labels": ["enhancement", "feature", "ambitious"],
+      "milestone": "v3.0.0"
+    },
+    {
+      "title": "Performance: Optimize Playwright browser lifecycle",
+      "body": "## Description\nImprove browser management to reduce resource usage.\n\n## Current Issues\n- Browser stays open between requests\n- Memory leaks with long-running process\n- Slow cold starts\n\n## Solutions\n- Browser pooling\n- Automatic cleanup\n- Warm start optimization\n- Headless mode improvements",
+      "labels": ["bug", "performance"],
+      "milestone": "v1.1.0"
+    },
+    {
+      "title": "Add URL shortener for sharing guidelines",
+      "body": "## Description\nCreate short, memorable URLs for sharing specific guidelines.\n\n## Features\n- Generate short codes\n- Track usage (optional)\n- Custom aliases\n- QR code generation\n\n## Implementation\n- Local URL mapping\n- Collision prevention\n- Expiration handling",
+      "labels": ["enhancement", "feature", "good-first-issue"],
+      "milestone": "v1.3.0"
+    },
+    {
+      "title": "Security: Add input sanitization for all tools",
+      "body": "## Description\nEnsure all user inputs are properly sanitized to prevent security issues.\n\n## Areas to Review\n- Search query injection\n- Path traversal in browseSection\n- URL validation in getGuideline\n- Cache key generation\n\n## Implementation\n- Input validation schemas\n- Security tests\n- Penetration testing",
+      "labels": ["security", "priority:high", "bug"],
+      "milestone": "v1.0.1"
+    }
+  ]
+}

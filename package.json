@@ -18,7 +18,12 @@
     "index": "tsx scripts/index-content.ts",
     "index:incremental": "tsx scripts/index-content.ts --incremental",
     "index:test": "tsx scripts/index-content.ts --test",
-    "index:rebuild": "tsx scripts/index-content.ts --rebuild-index"
+    "index:rebuild": "tsx scripts/index-content.ts --rebuild-index",
+    "create-issues": "node scripts/create-github-issues.js",
+    "create-issues:dry": "node scripts/create-github-issues.js --dry-run",
+    "create-issues:api": "node scripts/create-github-issues-api.js",
+    "create-issues:api:dry": "node scripts/create-github-issues-api.js --dry-run",
+    "create-issues:shell": "bash scripts/create-github-issues.sh"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^0.5.0",

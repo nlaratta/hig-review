@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 // Platform types
 export type ApplePlatform = 'ios' | 'macos' | 'watchos' | 'tvos' | 'visionos';
+export type Platform = ApplePlatform; // Alias for compatibility
 
 // Tool parameter schemas
 export const SearchHIGSchema = z.object({
@@ -54,7 +55,11 @@ export interface HIGGuideline {
   examples?: Example[];
   codeSnippets?: CodeSnippet[];
   relatedGuidelines?: string[];
+  topics?: string[]; // Topics for WWDC mapping
 }
+
+// Alias for compatibility
+export type Guideline = HIGGuideline;
 
 export interface HIGSection {
   path: string;
@@ -135,3 +140,6 @@ export interface Logger {
   debug(message: string, data?: any): void;
   warn(message: string, data?: any): void;
 }
+
+// Re-export WWDC types
+export * from './wwdc.js';

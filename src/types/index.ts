@@ -19,6 +19,7 @@ export const GetGuidelineSchema = z.object({
   guidelineId: z.string().describe('Specific guideline ID or URL path'),
   includeExamples: z.boolean().optional().default(true),
   includeCode: z.boolean().optional().default(true),
+  includeWWDC: z.boolean().optional().default(true).describe('Include related WWDC sessions'),
 });
 
 export const BrowseSectionSchema = z.object({
@@ -28,11 +29,20 @@ export const BrowseSectionSchema = z.object({
 
 export const GetServerInfoSchema = z.object({});
 
+export const GetSessionSchema = z.object({
+  sessionId: z.string().describe('WWDC session ID'),
+  includeTranscript: z.boolean().optional().default(false).describe('Include full transcript'),
+  includeCode: z.boolean().optional().default(false).describe('Include code examples'),
+  timestamp: z.number().optional().describe('Jump to specific timestamp in seconds'),
+  includeRelatedGuidelines: z.boolean().optional().default(false).describe('Include related HIG guidelines'),
+});
+
 // Type inference from schemas
 export type SearchHIGParams = z.infer<typeof SearchHIGSchema>;
 export type GetGuidelineParams = z.infer<typeof GetGuidelineSchema>;
 export type BrowseSectionParams = z.infer<typeof BrowseSectionSchema>;
 export type GetServerInfoParams = z.infer<typeof GetServerInfoSchema>;
+export type GetSessionParams = z.infer<typeof GetSessionSchema>;
 
 // Response types
 export interface HIGSearchResult {

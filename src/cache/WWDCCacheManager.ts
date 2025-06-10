@@ -200,6 +200,44 @@ export class WWDCCacheManager extends CacheManager {
   }
 
   /**
+   * Get all cached sessions
+   */
+  async getAllSessions(): Promise<WWDCSession[]> {
+    const sessions: WWDCSession[] = [];
+    
+    // Get from memory cache first
+    const allKeys = this.sessionCache.keys();
+    for (const key of allKeys) {
+      const session = this.sessionCache.get<WWDCSession>(key);
+      if (session) {
+        sessions.push(session);
+      }
+    }
+    
+    // If no sessions in memory, try to load from disk
+    if (sessions.length === 0) {
+      try {
+        const currentYear = new Date().getFullYear();
+        const years = [currentYear, currentYear - 1, currentYear - 2]; // Load recent years
+        
+        for (const year of years) {
+          const yearSessions = await this.loadSessionsFromDisk(year);
+          sessions.push(...yearSessions);
+          
+          // Also populate memory cache
+          for (const session of yearSessions) {
+            this.sessionCache.set(this.getSessionKey(session.id), session);
+          }
+        }
+      } catch (error) {
+        logger.error('Failed to load sessions from disk', error);
+      }
+    }
+    
+    return sessions;
+  }
+  
+  /**
    * Search sessions by topic
    */
   async searchSessionsByTopic(topic: string): Promise<WWDCSession[]> {

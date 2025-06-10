@@ -14,10 +14,12 @@ import {
   GetGuidelineSchema,
   BrowseSectionSchema,
   GetServerInfoSchema,
+  GetSessionSchema,
   SearchHIGParams,
   GetGuidelineParams,
   BrowseSectionParams,
   GetServerInfoParams,
+  GetSessionParams,
   ServerInfo,
   HIGServerError,
   CodeSnippet,
@@ -28,8 +30,12 @@ import { getServerConfig, SERVER_NAME, SERVER_VERSION } from './utils/config.js'
 import { GetGuideline } from './tools/getGuideline.js';
 import { higSearchEngine } from './tools/searchHIG.js';
 import { browseSection } from './tools/browseSection.js';
+import { searchWWDCTool, SearchWWDCSchema } from './tools/searchWWDC.js';
+import { initializeGetSession, getSession } from './tools/getSession.js';
 import { CacheManager } from './cache/CacheManager.js';
+import { WWDCCacheManager } from './cache/WWDCCacheManager.js';
 import { browserManager } from './scraper/BrowserManager.js';
+import { SearchWWDCParams } from './types/wwdc.js';
 
 class AppleHIGServer {
   private server: Server;
@@ -37,6 +43,7 @@ class AppleHIGServer {
   private config = getServerConfig();
   private guidelineTool: GetGuideline;
   private cacheManager: CacheManager;
+  private wwdcCacheManager: WWDCCacheManager;
   private initializationPromise: Promise<void> | null = null;
 
   constructor() {
@@ -62,6 +69,13 @@ class AppleHIGServer {
       maxEntries: 500,
       cleanupInterval: 60 * 60 * 1000 // 1 hour
     });
+    this.wwdcCacheManager = new WWDCCacheManager({
+      baseDir: './cache/wwdc',
+      sessionTTL: 604800, // 1 week
+      transcriptTTL: 2592000, // 30 days
+      codeTTL: 1209600 // 2 weeks
+    });
+    initializeGetSession(this.wwdcCacheManager);
 
     this.setupHandlers();
     logger.info('Apple HIG MCP Server initialized', { config: this.config });
@@ -117,6 +131,11 @@ class AppleHIGServer {
                   description: 'Include SwiftUI/UIKit code samples',
                   default: true,
                 },
+                includeWWDC: {
+                  type: 'boolean',
+                  description: 'Include related WWDC sessions',
+                  default: true,
+                },
               },
               required: ['guidelineId'],
             },
@@ -149,6 +168,78 @@ class AppleHIGServer {
               required: [],
             },
           },
+          {
+            name: 'getSession',
+            description: 'Get WWDC session details with transcript, code examples, and related HIG guidelines',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                sessionId: {
+                  type: 'string',
+                  description: 'WWDC session ID',
+                },
+                includeTranscript: {
+                  type: 'boolean',
+                  description: 'Include full transcript',
+                  default: false,
+                },
+                includeCode: {
+                  type: 'boolean',
+                  description: 'Include code examples',
+                  default: false,
+                },
+                timestamp: {
+                  type: 'number',
+                  description: 'Jump to specific timestamp in seconds',
+                },
+                includeRelatedGuidelines: {
+                  type: 'boolean',
+                  description: 'Include related HIG guidelines',
+                  default: false,
+                },
+              },
+              required: ['sessionId'],
+            },
+          },
+          {
+            name: 'searchWWDC',
+            description: 'Search WWDC sessions for content related to Apple HIG guidelines',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  description: 'Search query string',
+                },
+                year: {
+                  type: 'number',
+                  description: 'Filter by specific year (e.g., 2023)',
+                },
+                platform: {
+                  type: 'string',
+                  enum: ['ios', 'macos', 'watchos', 'tvos', 'visionos'],
+                  description: 'Filter by Apple platform',
+                },
+                searchIn: {
+                  type: 'string',
+                  enum: ['all', 'titles', 'transcripts', 'code'],
+                  description: 'Where to search: all, titles only, transcripts only, or code examples',
+                  default: 'all',
+                },
+                includeCode: {
+                  type: 'boolean',
+                  description: 'Include code examples in results',
+                  default: false,
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of results to return',
+                  default: 20,
+                },
+              },
+              required: ['query'],
+            },
+          },
         ],
       };
     });
@@ -176,6 +267,14 @@ class AppleHIGServer {
           case 'getServerInfo': {
             const validated = GetServerInfoSchema.parse(args);
             return await this.getServerInfo(validated);
+          }
+          case 'getSession': {
+            const validated = GetSessionSchema.parse(args);
+            return await this.getSession(validated);
+          }
+          case 'searchWWDC': {
+            const validated = SearchWWDCSchema.parse(args);
+            return await this.searchWWDC(validated);
           }
           default:
             logger.error(`Unknown tool requested: ${name}`);
@@ -385,6 +484,56 @@ class AppleHIGServer {
     }
   }
 
+  private async searchWWDC(params: SearchWWDCParams) {
+    try {
+      logger.debug('Searching WWDC sessions', params);
+      
+      // Execute the search
+      const results = await searchWWDCTool.execute(params);
+      
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: results,
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error('Error in searchWWDC', error);
+      
+      if (error instanceof HIGServerError) {
+        throw error;
+      }
+      
+      throw new HIGServerError('WWDC_SEARCH_ERROR', 'Failed to search WWDC content', error);
+    }
+  }
+
+  private async getSession(params: GetSessionParams) {
+    try {
+      logger.debug('Getting WWDC session', params);
+      
+      // Ensure initialization is complete
+      if (this.initializationPromise) {
+        await this.initializationPromise;
+      }
+      
+      // Execute the getSession tool
+      const result = await getSession().execute(params);
+      
+      return result;
+    } catch (error) {
+      logger.error('Error in getSession', error);
+      
+      if (error instanceof HIGServerError) {
+        throw error;
+      }
+      
+      throw new HIGServerError('SESSION_FETCH_ERROR', 'Failed to fetch WWDC session', error);
+    }
+  }
+
   /**
    * Initialize server components
    */
@@ -399,6 +548,10 @@ class AppleHIGServer {
       // Initialize search engine
       logger.info('Initializing search engine...');
       await higSearchEngine.initialize();
+      
+      // Initialize WWDC linker for GetGuideline tool
+      logger.info('Initializing WWDC linker for guidelines...');
+      this.guidelineTool.initializeWWDCLinker(higSearchEngine);
       
       // Warm cache with popular sections
       logger.info('Warming cache...');
@@ -469,8 +622,9 @@ class AppleHIGServer {
       // Close browser
       await browserManager.close();
       
-      // Close cache manager
+      // Close cache managers
       await this.cacheManager.close();
+      await this.wwdcCacheManager.close();
       
       logger.info('Server shutdown complete');
     } catch (error) {

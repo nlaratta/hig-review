@@ -7,6 +7,7 @@ import { BrowserManager } from '../scraper/BrowserManager.js';
 import { RateLimiter } from '../scraper/RateLimiter.js';
 import { logger } from '../utils/logger.js';
 import { WWDCSession, WWDCTranscript } from '../types/wwdc.js';
+import { Platform } from '../types/index.js';
 
 export class WWDCScraper {
   private rateLimiter: RateLimiter;
@@ -33,7 +34,7 @@ export class WWDCScraper {
 
     // Rate limiting is handled within execute method
 
-    const page = await this.browserManager.getPage();
+    const page = await this.browserManager.newPage();
     const sessions: WWDCSession[] = [];
 
     try {
@@ -61,7 +62,7 @@ export class WWDCScraper {
       logger.error(`Failed to scrape WWDC ${year} session list`, error);
       throw error;
     } finally {
-      await this.browserManager.releasePage(page);
+      await page.close();
     }
 
     return sessions;
@@ -79,7 +80,7 @@ export class WWDCScraper {
 
     // Rate limiting is handled within execute method
 
-    const page = await this.browserManager.getPage();
+    const page = await this.browserManager.newPage();
 
     try {
       await page.goto(url, { waitUntil: 'networkidle' });
@@ -111,7 +112,7 @@ export class WWDCScraper {
       logger.error(`Failed to scrape session details`, { sessionId, error });
       throw error;
     } finally {
-      await this.browserManager.releasePage(page);
+      await page.close();
     }
   }
 
@@ -263,10 +264,10 @@ export class WWDCScraper {
   /**
    * Extract related platforms
    */
-  private async extractPlatforms(page: Page): Promise<string[]> {
+  private async extractPlatforms(page: Page): Promise<Platform[]> {
     try {
       const platformElements = await page.$$('.platform-tag');
-      const platforms: string[] = [];
+      const platforms: Platform[] = [];
       
       for (const element of platformElements) {
         const platform = await element.textContent();
@@ -276,7 +277,7 @@ export class WWDCScraper {
         }
       }
       
-      return platforms as any[];
+      return platforms;
     } catch {
       return [];
     }
@@ -435,7 +436,7 @@ export class WWDCScraper {
   /**
    * Normalize platform names
    */
-  private normalizePlatform(platform: string): string | null {
+  private normalizePlatform(platform: string): Platform | null {
     const normalized = platform.toLowerCase();
     
     if (normalized.includes('ios') || normalized.includes('iphone') || normalized.includes('ipad')) {

@@ -1,4 +1,4 @@
-import Fuse from 'fuse.js';
+import Fuse, { IFuseOptions } from 'fuse.js';
 import { CacheManager } from '../cache/CacheManager.js';
 import { logger } from '../utils/logger.js';
 import * as fs from 'fs/promises';
@@ -267,7 +267,7 @@ export class IndexBuilder {
    * Create Fuse.js index for fast searching
    */
   private createFuseIndex(entries: SearchIndexEntry[]): void {
-    const fuseOptions: Fuse.IFuseOptions<SearchIndexEntry> = {
+    const fuseOptions: IFuseOptions<SearchIndexEntry> = {
       keys: [
         { name: 'title', weight: 2.0 },
         { name: 'description', weight: 1.5 },

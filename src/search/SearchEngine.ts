@@ -1,4 +1,4 @@
-import Fuse from 'fuse.js';
+import Fuse, { IFuseOptions } from 'fuse.js';
 import { HIGSearchResult } from '../types/index.js';
 import { IndexBuilder } from '../indexer/IndexBuilder.js';
 import { logger } from '../utils/logger.js';
@@ -138,7 +138,7 @@ export class SearchEngine {
    * Initialize Fuse with fallback data
    */
   private initializeFuseWithFallback(): void {
-    const fuseOptions: Fuse.IFuseOptions<any> = {
+    const fuseOptions: IFuseOptions<any> = {
       keys: [
         { name: 'title', weight: 2.0 },
         { name: 'description', weight: 1.5 },

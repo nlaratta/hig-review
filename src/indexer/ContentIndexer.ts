@@ -356,7 +356,7 @@ export class ContentIndexer {
 
     // Add title words
     const titleWords = content.title.toLowerCase().split(/\s+/);
-    titleWords.forEach(word => {
+    titleWords.forEach((word: string) => {
       if (word.length > 3) keywords.add(word);
     });
 

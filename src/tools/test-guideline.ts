@@ -55,7 +55,8 @@ async function testGetGuideline() {
       const result = await guidelineTool.execute({
         guidelineId: test.id,
         includeExamples: test.includeExamples,
-        includeCode: test.includeCode
+        includeCode: test.includeCode,
+        includeWWDC: false // Disable WWDC for tests
       });
       
       const duration = Date.now() - startTime;
@@ -125,7 +126,8 @@ async function testGetGuideline() {
     await guidelineTool.execute({
       guidelineId: testUrls[0].id,
       includeExamples: testUrls[0].includeExamples,
-      includeCode: testUrls[0].includeCode
+      includeCode: testUrls[0].includeCode,
+      includeWWDC: false // Disable WWDC for tests
     });
     
     const duration = Date.now() - startTime;

@@ -80,7 +80,21 @@ export class BrowseSection {
 
     // Handle subsections
     if (mainSection === 'components' && 'categories' in section) {
-      return this.getComponentCategoryInfo(subSection, section.categories);
+      // First check if subsection is a category
+      const categoryInfo = this.getComponentCategoryInfo(subSection, section.categories);
+      if (categoryInfo) {
+        return categoryInfo;
+      }
+      
+      // If not a category, check if it's a component within a category
+      for (const [categoryId, category] of Object.entries(section.categories)) {
+        if (typeof category === 'object' && category !== null && 'items' in category) {
+          const items = category.items as string[];
+          if (items.some(item => item === `/${subSection}` || item.endsWith(`/${subSection}`))) {
+            return this.getComponentInfo(subSection, categoryId, category);
+          }
+        }
+      }
     }
 
     return null;
@@ -205,6 +219,25 @@ export class BrowseSection {
       description: (category.description || `Components in the ${categoryId} category`) as string,
       url: `${this.baseUrl}/components/${categoryId}`,
       items
+    };
+  }
+
+  /**
+   * Get specific component information
+   */
+  private getComponentInfo(componentId: string, categoryId: string, category: any): SectionInfo {
+    const componentName = this.titleCase(componentId.replace(/-/g, ' '));
+    const categoryName = this.titleCase(categoryId.replace(/-/g, ' '));
+    
+    return {
+      title: componentName,
+      description: `A UI component in the ${categoryName} category. ${componentName} provides interactive functionality for user interfaces.`,
+      url: `${this.baseUrl}/components/${componentId}`,
+      items: [{
+        name: `View ${componentName} Documentation`,
+        path: `/components/${componentId}`,
+        description: `Complete documentation and usage guidelines for ${componentName}`
+      }]
     };
   }
 

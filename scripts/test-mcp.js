@@ -113,13 +113,13 @@ class MCPTester {
       this.pendingRequests.set(id, { resolve, reject });
       this.sendMessage(message);
       
-      // Timeout after 5 seconds
+      // Timeout after 5 seconds (15 seconds for getGuideline as it needs to fetch web content)
       setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
           reject(new Error(`Request ${id} timed out`));
         }
-      }, 5000);
+      }, message.method === 'tools/call' && message.params?.name === 'getGuideline' ? 15000 : 5000);
     });
   }
 

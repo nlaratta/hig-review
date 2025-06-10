@@ -153,48 +153,104 @@ export class GetGuideline {
       return `${this.baseUrl}${guidelineId}`;
     }
 
-    // Assume it's a relative path
-    return `${this.baseUrl}/${guidelineId}`;
+    // Handle the new Apple HIG URL structure
+    // Convert old format "components/buttons" to new format "buttons"
+    let cleanId = guidelineId;
+    
+    // Remove category prefixes like "components/", "foundations/", "patterns/", etc.
+    cleanId = cleanId.replace(/^(components|foundations|patterns|technologies|inputs)\//, '');
+    
+    // Ensure we don't double up the base URL
+    return `${this.baseUrl}/${cleanId}`;
   }
 
   /**
-   * Fetch page content using Playwright
+   * Fetch page content using Playwright with enhanced error handling
    */
   private async fetchPageContent(url: string): Promise<string> {
     let page: Page | null = null;
+    const isTestEnvironment = process.env.NODE_ENV === 'test';
+    const timeout = isTestEnvironment ? 8000 : 30000; // Shorter timeout for tests
+    const operationId = `fetch-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     try {
-      // Initialize browser if needed
+      // Check if browser manager is available and not shutting down
       if (!browserManager.isReady()) {
         await browserManager.initialize();
       }
 
+      // Register this operation to prevent browser shutdown during page fetch
+      browserManager.registerOperation(operationId);
+
       page = await browserManager.newPage('guideline-fetcher');
 
-      // Navigate to the page
-      await page.goto(url, {
-        waitUntil: 'networkidle',
-        timeout: 30000
-      });
+      // Set shorter timeouts for test environment
+      if (isTestEnvironment) {
+        page.setDefaultTimeout(5000);
+        page.setDefaultNavigationTimeout(8000);
+      }
 
-      // Wait for main content to be loaded
-      await page.waitForSelector('main, article, [role="main"]', {
-        timeout: 10000
-      });
+      // Navigate to the page with retry logic
+      let lastError: Error | null = null;
+      let retries = isTestEnvironment ? 1 : 2; // Fewer retries in test environment
 
-      // Additional wait for dynamic content
-      await page.waitForTimeout(2000);
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          await page.goto(url, {
+            waitUntil: 'networkidle',
+            timeout
+          });
 
-      // Get the page content
-      const html = await page.content();
+          // Wait for main content to be loaded
+          await page.waitForSelector('main, article, [role="main"]', {
+            timeout: isTestEnvironment ? 3000 : 10000
+          });
 
-      return html;
+          // Additional wait for dynamic content (shorter in tests)
+          await page.waitForTimeout(isTestEnvironment ? 500 : 2000);
+
+          // Get the page content
+          const html = await page.content();
+
+          if (html.length < 100) {
+            throw new Error('Page content too short, likely failed to load');
+          }
+
+          return html;
+        } catch (error) {
+          lastError = error as Error;
+          if (attempt === retries) {
+            break; // Last attempt failed
+          }
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      throw lastError || new Error('Failed to fetch page content');
     } catch (error) {
-      logger.error('Failed to fetch page content', { url, error });
-      throw error;
+      const errorDetails = {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        name: error instanceof Error ? error.name : 'UnknownError',
+        stack: error instanceof Error ? error.stack : undefined,
+        url,
+        timeout: error instanceof Error && error.message.includes('timeout'),
+        connectionError: error instanceof Error && (error.message.includes('net::') || error.message.includes('Protocol error'))
+      };
+      logger.error('Failed to fetch page content', errorDetails);
+      throw new Error(`Failed to fetch page content from ${url}: ${errorDetails.message}`);
     } finally {
+      // Always unregister the operation
+      browserManager.unregisterOperation(operationId);
+      
       if (page) {
-        await page.close();
+        try {
+          await page.close();
+        } catch (closeError) {
+          logger.warn('Error closing page', { 
+            message: closeError instanceof Error ? closeError.message : 'Unknown close error' 
+          });
+        }
       }
     }
   }

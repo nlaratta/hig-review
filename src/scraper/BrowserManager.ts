@@ -8,14 +8,16 @@ export class BrowserManager {
   private static instance: BrowserManager;
   private browser: Browser | null = null;
   private contexts: Map<string, BrowserContext> = new Map();
-  private isInitialized = false;
+  private isInitialized: boolean = false;
+  private isShuttingDown: boolean = false;
+  private activeOperations: Set<string> = new Set();
 
   private constructor() {}
 
   /**
    * Get the singleton instance of BrowserManager
    */
-  public static getInstance(): BrowserManager {
+  static getInstance(): BrowserManager {
     if (!BrowserManager.instance) {
       BrowserManager.instance = new BrowserManager();
     }
@@ -25,7 +27,7 @@ export class BrowserManager {
   /**
    * Initialize the browser instance
    */
-  public async initialize(): Promise<void> {
+  async initialize(): Promise<void> {
     if (this.isInitialized) return;
 
     try {
@@ -40,7 +42,6 @@ export class BrowserManager {
           '--disable-gpu'
         ]
       });
-      
       this.isInitialized = true;
       console.log('Browser initialized successfully');
     } catch (error) {
@@ -52,7 +53,11 @@ export class BrowserManager {
   /**
    * Get or create a browser context
    */
-  public async getContext(contextId: string = 'default'): Promise<BrowserContext> {
+  async getContext(contextId: string = 'default'): Promise<BrowserContext> {
+    if (this.isShuttingDown) {
+      throw new Error('BrowserManager is shutting down');
+    }
+
     if (!this.isInitialized || !this.browser) {
       await this.initialize();
     }
@@ -70,7 +75,6 @@ export class BrowserManager {
           'Upgrade-Insecure-Requests': '1'
         }
       });
-
       this.contexts.set(contextId, context);
     }
 
@@ -78,9 +82,34 @@ export class BrowserManager {
   }
 
   /**
+   * Register an active operation to prevent shutdown
+   */
+  registerOperation(operationId: string): void {
+    this.activeOperations.add(operationId);
+  }
+
+  /**
+   * Unregister an active operation
+   */
+  unregisterOperation(operationId: string): void {
+    this.activeOperations.delete(operationId);
+  }
+
+  /**
+   * Check if there are active operations
+   */
+  hasActiveOperations(): boolean {
+    return this.activeOperations.size > 0;
+  }
+
+  /**
    * Create a new page in the specified context
    */
-  public async newPage(contextId: string = 'default'): Promise<Page> {
+  async newPage(contextId: string = 'default'): Promise<Page> {
+    if (this.isShuttingDown) {
+      throw new Error('BrowserManager is shutting down');
+    }
+
     const context = await this.getContext(contextId);
     const page = await context.newPage();
 
@@ -110,49 +139,96 @@ export class BrowserManager {
   }
 
   /**
-   * Close a specific context
+   * Close a specific context safely
    */
-  public async closeContext(contextId: string): Promise<void> {
+  async closeContext(contextId: string): Promise<void> {
     const context = this.contexts.get(contextId);
     if (context) {
-      await context.close();
-      this.contexts.delete(contextId);
-      console.log(`Context '${contextId}' closed`);
+      try {
+        await context.close();
+        this.contexts.delete(contextId);
+        console.log(`Context '${contextId}' closed`);
+      } catch (error) {
+        console.error(`Error closing context '${contextId}':`, error);
+        // Remove from map even if close failed
+        this.contexts.delete(contextId);
+      }
     }
   }
 
   /**
-   * Close all contexts and the browser
+   * Close all contexts and the browser safely
    */
-  public async close(): Promise<void> {
-    // Close all contexts
-    for (const [contextId, context] of this.contexts) {
-      await context.close();
-      console.log(`Context '${contextId}' closed`);
+  async close(): Promise<void> {
+    if (this.isShuttingDown) {
+      return; // Already shutting down
     }
-    this.contexts.clear();
 
-    // Close browser
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
+    this.isShuttingDown = true;
+
+    // Wait for active operations to complete
+    if (this.hasActiveOperations()) {
+      console.log(`Waiting for ${this.activeOperations.size} active operations to complete...`);
+      const maxWait = 15000; // 15 seconds max wait
+      const startTime = Date.now();
+      
+      while (this.hasActiveOperations() && (Date.now() - startTime) < maxWait) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      if (this.hasActiveOperations()) {
+        console.warn(`Force closing with ${this.activeOperations.size} operations still active:`, Array.from(this.activeOperations));
+      }
+    }
+
+    try {
+      // Close all contexts sequentially to avoid race conditions
+      const contextEntries = Array.from(this.contexts.entries());
+      for (const [contextId, context] of contextEntries) {
+        try {
+          await context.close();
+          console.log(`Context '${contextId}' closed`);
+        } catch (error) {
+          console.error(`Error closing context '${contextId}':`, error);
+        }
+      }
+      this.contexts.clear();
+
+      // Close browser
+      if (this.browser) {
+        try {
+          await this.browser.close();
+          console.log('Browser closed');
+        } catch (error) {
+          console.error('Error closing browser:', error);
+        }
+        this.browser = null;
+      }
+    } finally {
       this.isInitialized = false;
-      console.log('Browser closed');
+      this.isShuttingDown = false;
     }
   }
 
   /**
-   * Check if browser is initialized
+   * Check if browser is initialized and ready
    */
-  public isReady(): boolean {
-    return this.isInitialized && this.browser !== null;
+  isReady(): boolean {
+    return this.isInitialized && this.browser !== null && !this.isShuttingDown;
   }
 
   /**
    * Get browser instance (for advanced usage)
    */
-  public getBrowser(): Browser | null {
+  getBrowser(): Browser | null {
     return this.browser;
+  }
+
+  /**
+   * Get number of active contexts
+   */
+  getActiveContextCount(): number {
+    return this.contexts.size;
   }
 }
 

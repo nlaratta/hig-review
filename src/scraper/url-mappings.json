@@ -1,0 +1,297 @@
+{
+  "base_url": "https://developer.apple.com/design/human-interface-guidelines",
+  "platforms": {
+    "ios": {
+      "main": "/designing-for-ios",
+      "description": "Guidelines for iPhone app design"
+    },
+    "macos": {
+      "main": "/designing-for-macos",
+      "description": "Guidelines for Mac app design"
+    },
+    "watchos": {
+      "main": "/designing-for-watchos",
+      "description": "Guidelines for Apple Watch app design"
+    },
+    "tvos": {
+      "main": "/designing-for-tvos",
+      "description": "Guidelines for Apple TV app design"
+    },
+    "visionos": {
+      "main": "/designing-for-visionos",
+      "description": "Guidelines for Apple Vision Pro app design"
+    }
+  },
+  "sections": {
+    "foundations": {
+      "main": "/foundations",
+      "description": "Fundamental design elements",
+      "subcategories": [
+        "/foundations/layout",
+        "/foundations/motion",
+        "/foundations/app-icons",
+        "/foundations/icons",
+        "/foundations/materials",
+        "/foundations/color",
+        "/foundations/typography",
+        "/foundations/sf-symbols",
+        "/foundations/branding",
+        "/foundations/dark-mode",
+        "/foundations/accessibility",
+        "/foundations/inclusion"
+      ]
+    },
+    "patterns": {
+      "main": "/patterns",
+      "description": "Design guidance for common user actions",
+      "subcategories": [
+        "/patterns/accessing-private-data",
+        "/patterns/drag-and-drop",
+        "/patterns/entering-data",
+        "/patterns/feedback",
+        "/patterns/file-management",
+        "/patterns/going-full-screen",
+        "/patterns/launching",
+        "/patterns/loading",
+        "/patterns/managing-accounts",
+        "/patterns/managing-notifications",
+        "/patterns/modality",
+        "/patterns/multitasking",
+        "/patterns/onboarding",
+        "/patterns/playing-audio",
+        "/patterns/playing-haptics",
+        "/patterns/playing-video",
+        "/patterns/printing",
+        "/patterns/purchasing",
+        "/patterns/ratings-and-reviews",
+        "/patterns/searching",
+        "/patterns/settings",
+        "/patterns/undo-and-redo",
+        "/patterns/workouts"
+      ]
+    },
+    "components": {
+      "main": "/components",
+      "description": "System-defined UI components",
+      "all_components": "/components/all-components",
+      "categories": {
+        "content": {
+          "path": "/components/content",
+          "items": [
+            "/charts",
+            "/image-views",
+            "/text-views",
+            "/web-views"
+          ]
+        },
+        "inputs": {
+          "path": "/components/inputs",
+          "items": [
+            "/buttons",
+            "/color-wells",
+            "/combo-boxes",
+            "/digit-entry-views",
+            "/image-wells",
+            "/onscreen-keyboards",
+            "/pickers",
+            "/segmented-controls",
+            "/sliders",
+            "/steppers",
+            "/text-fields",
+            "/toggles",
+            "/touch-bars",
+            "/virtual-keyboards"
+          ]
+        },
+        "layout_and_organization": {
+          "path": "/components/layout-and-organization",
+          "items": [
+            "/boxes",
+            "/collections",
+            "/column-views",
+            "/disclosure-controls",
+            "/labels",
+            "/lists-and-tables",
+            "/lockups",
+            "/outline-views",
+            "/split-views",
+            "/tab-views"
+          ]
+        },
+        "menus_and_actions": {
+          "path": "/components/menus-and-actions",
+          "items": [
+            "/activity-views",
+            "/context-menus",
+            "/dock-menus",
+            "/edit-menus",
+            "/menus",
+            "/pop-up-buttons",
+            "/pull-down-buttons",
+            "/toolbars"
+          ]
+        },
+        "navigation_and_search": {
+          "path": "/components/navigation-and-search",
+          "items": [
+            "/navigation-bars",
+            "/page-controls",
+            "/path-controls",
+            "/search-fields",
+            "/sidebars",
+            "/tab-bars",
+            "/token-fields"
+          ]
+        },
+        "presentation": {
+          "path": "/components/presentation",
+          "items": [
+            "/action-sheets",
+            "/alerts",
+            "/ornaments",
+            "/panels",
+            "/popovers",
+            "/scroll-views",
+            "/sheets",
+            "/windows"
+          ]
+        },
+        "selection_and_input": {
+          "path": "/components/selection-and-input",
+          "items": [
+            "/apple-pencil",
+            "/color-pickers",
+            "/date-pickers",
+            "/digital-crown",
+            "/focus-indicator",
+            "/game-controllers",
+            "/hover-effects",
+            "/keyboards",
+            "/motion",
+            "/pointer",
+            "/remotes",
+            "/touch-gesture"
+          ]
+        },
+        "status": {
+          "path": "/components/status",
+          "items": [
+            "/activity-indicators",
+            "/gauges",
+            "/progress-indicators"
+          ]
+        },
+        "system_experiences": {
+          "path": "/components/system-experiences",
+          "items": [
+            "/apple-tv-top-shelf",
+            "/complications",
+            "/home-screen-quick-actions",
+            "/live-activities",
+            "/notifications",
+            "/printing",
+            "/quick-look",
+            "/ratings-and-reviews",
+            "/screenshot",
+            "/status-bars",
+            "/watch-faces",
+            "/widgets"
+          ]
+        }
+      }
+    },
+    "inputs": {
+      "main": "/inputs",
+      "description": "Input methods and interactions",
+      "subcategories": [
+        "/inputs/apple-pencil",
+        "/inputs/digital-crown",
+        "/inputs/eyes",
+        "/inputs/focus-and-selection",
+        "/inputs/game-controllers",
+        "/inputs/gestures",
+        "/inputs/gyroscope-and-accelerometer",
+        "/inputs/hands",
+        "/inputs/hover",
+        "/inputs/keyboards",
+        "/inputs/motion",
+        "/inputs/pointing-devices",
+        "/inputs/remotes",
+        "/inputs/siri-remote",
+        "/inputs/spatial-interactions",
+        "/inputs/touch",
+        "/inputs/touchscreen-keyboards",
+        "/inputs/voice"
+      ]
+    },
+    "technologies": {
+      "main": "/technologies",
+      "description": "Platform-specific frameworks and services",
+      "items": [
+        "/airplay",
+        "/always-on",
+        "/app-clips",
+        "/app-shortcuts",
+        "/apple-pay",
+        "/augmented-reality",
+        "/carplay",
+        "/classkit",
+        "/core-ml",
+        "/game-center",
+        "/handoff",
+        "/healthkit",
+        "/homekit",
+        "/icloud",
+        "/in-app-purchase",
+        "/live-photos",
+        "/maps",
+        "/messages-for-business",
+        "/multitasking",
+        "/near-field-communication",
+        "/notifications",
+        "/photo-editing",
+        "/quick-note",
+        "/shareplay",
+        "/siri",
+        "/stage-manager",
+        "/system-photo-picker",
+        "/tap-to-pay",
+        "/wallet",
+        "/widgets"
+      ]
+    }
+  },
+  "additional_resources": {
+    "design_resources": "https://developer.apple.com/design/resources/",
+    "sf_symbols": "https://developer.apple.com/sf-symbols/",
+    "design_videos": "https://developer.apple.com/videos/design/",
+    "whats_new": "https://developer.apple.com/design/whats-new/"
+  },
+  "navigation_patterns": {
+    "breadcrumb": "Design > Human Interface Guidelines > [Section] > [Subsection]",
+    "url_structure": "/design/human-interface-guidelines/[section]/[subsection]",
+    "platform_specific": "/design/human-interface-guidelines/[component]#[platform]",
+    "localization": {
+      "japanese": "/jp/design/human-interface-guidelines/",
+      "chinese": "/cn/design/human-interface-guidelines/"
+    }
+  },
+  "api_endpoints": {
+    "note": "No public API endpoints discovered. Content is server-side rendered with JavaScript enhancement."
+  },
+  "sitemap": {
+    "note": "No explicit sitemap.xml found. Navigation structure derived from main navigation menus."
+  },
+  "content_types": {
+    "guidelines": "Detailed design guidance with examples",
+    "best_practices": "Platform-specific recommendations",
+    "code_examples": "SwiftUI and UIKit implementation examples",
+    "design_downloads": "Sketch, Figma, and XD templates",
+    "videos": "WWDC sessions and design tutorials"
+  },
+  "update_frequency": {
+    "major_updates": "Annual (WWDC)",
+    "minor_updates": "With OS releases",
+    "continuous": "Bug fixes and clarifications"
+  }
+}

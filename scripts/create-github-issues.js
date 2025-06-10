@@ -5,10 +5,11 @@
  * Usage: node scripts/create-github-issues.js [--dry-run]
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { tmpdir } from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -90,8 +91,12 @@ for (const [index, issue] of issuesData.issues.entries()) {
   console.log(`\n[${issueNumber}/${issuesData.issues.length}] ${issue.title}`);
   
   try {
-    // Build the gh issue create command
-    let command = `gh issue create --title "${issue.title.replace(/"/g, '\\"')}" --body "${issue.body.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
+    // Write body to a temporary file to handle newlines properly
+    const bodyFile = join(tmpdir(), `gh-issue-body-${Date.now()}-${index}.md`);
+    writeFileSync(bodyFile, issue.body);
+    
+    // Build the gh issue create command using --body-file
+    let command = `gh issue create --title "${issue.title.replace(/"/g, '\\"')}" --body-file "${bodyFile}"`;
     
     // Add labels if present
     if (issue.labels && issue.labels.length > 0) {
@@ -106,10 +111,15 @@ for (const [index, issue] of issuesData.issues.entries()) {
     if (isDryRun) {
       console.log(`${colors.yellow}Would execute: ${command.substring(0, 100)}...${colors.reset}`);
       successCount++;
+      // Clean up temp file
+      unlinkSync(bodyFile);
     } else {
       const output = execSync(command, { encoding: 'utf8' });
       console.log(`${colors.green}✓ Created: ${output.trim()}${colors.reset}`);
       successCount++;
+      
+      // Clean up temp file
+      unlinkSync(bodyFile);
       
       // Add a small delay to avoid rate limiting
       if (index < issuesData.issues.length - 1) {
@@ -119,6 +129,11 @@ for (const [index, issue] of issuesData.issues.entries()) {
   } catch (error) {
     console.error(`${colors.red}✗ Error creating issue:${colors.reset}`, error.message);
     errorCount++;
+    // Try to clean up temp file if it exists
+    try {
+      const bodyFile = join(tmpdir(), `gh-issue-body-${Date.now()}-${index}.md`);
+      unlinkSync(bodyFile);
+    } catch {}
   }
 }
 

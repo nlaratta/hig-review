@@ -177,7 +177,7 @@ async function createIssues() {
         if (!isDryRun) {
           const issueData = {
             title: issue.title,
-            body: issue.body,
+            body: issue.body, // GitHub API handles newlines properly
             labels: issue.labels || []
           };
           

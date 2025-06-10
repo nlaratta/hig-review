@@ -73,8 +73,21 @@ export class HIGScraper {
         throw new Error(`Page not found: ${url}`);
       }
 
-      // Wait for content to load
-      await page.waitForSelector('main', { timeout: 10000 });
+      // Wait for Apple HIG content to load and render
+      try {
+        // Wait for the content to be loaded and have substantial text
+        await page.waitForFunction(() => {
+          const content = document.querySelector('.content, .doc-content, .design-view');
+          return content && content.textContent && content.textContent.length > 1000;
+        }, { timeout: 15000 });
+        
+        logger.debug('Content loaded successfully', { url });
+      } catch (error) {
+        logger.warn('Timeout waiting for content, proceeding anyway', { url, error: error instanceof Error ? error.message : String(error) });
+      }
+      
+      // Additional wait for any remaining dynamic content
+      await page.waitForTimeout(3000);
 
       // Get the page content
       const html = await page.content();

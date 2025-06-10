@@ -1,10 +1,10 @@
-import { HIGScraper } from '../scraper/HIGScraper.js';
+import { EnhancedHIGScraper } from '../scraper/EnhancedHIGScraper.js';
 import { ContentParser } from '../parser/ContentParser.js';
 import { CacheManager } from '../cache/CacheManager.js';
 import { logger } from '../utils/logger.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import urlMappings from '../scraper/url-mappings.json' assert { type: 'json' };
+import urlMappings from '../scraper/url-mappings.json' with { type: 'json' };
 
 export interface IndexProgress {
   total: number;
@@ -36,7 +36,7 @@ export interface IndexedContent {
 }
 
 export class ContentIndexer {
-  private scraper: HIGScraper;
+  private scraper: EnhancedHIGScraper;
   private parser: ContentParser;
   private cache: CacheManager;
   private progress: IndexProgress;
@@ -45,7 +45,7 @@ export class ContentIndexer {
   private abortController: AbortController;
 
   constructor(cacheDir: string = './cache') {
-    this.scraper = new HIGScraper();
+    this.scraper = new EnhancedHIGScraper();
     this.parser = new ContentParser();
     this.cache = new CacheManager({ baseDir: cacheDir });
     this.progressFile = path.join(cacheDir, 'index-progress.json');
@@ -156,8 +156,8 @@ export class ContentIndexer {
       let indexedContent: IndexedContent;
 
       try {
-        // Try to parse the content
-        const parsedContent = await this.parser.parse(scrapedContent.content, fullUrl);
+        // Try to parse the content using HTML structure
+        const parsedContent = await this.parser.parse(scrapedContent.html, fullUrl);
 
         // Extract keywords
         const keywords = this.extractKeywords(parsedContent);
@@ -191,10 +191,10 @@ export class ContentIndexer {
           url: fullUrl,
           title: scrapedContent.title,
           description: scrapedContent.summary || '',
-          content: scrapedContent.content,
+          content: scrapedContent.textContent,
           sections: [{
             title: scrapedContent.title,
-            content: scrapedContent.content,
+            content: scrapedContent.textContent,
             type: 'general'
           }],
           platform: urlInfo.platform,

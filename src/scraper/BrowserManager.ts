@@ -123,10 +123,16 @@ export class BrowserManager {
       'sec-fetch-site': 'none'
     });
 
-    // Handle console messages for debugging
+    // Handle console messages for debugging (filter out harmless CORS font errors)
     page.on('console', msg => {
       if (msg.type() === 'error') {
-        console.error('Page console error:', msg.text());
+        const errorText = msg.text();
+        // Filter out CORS font loading errors from Apple's website
+        if (!errorText.includes('CORS policy') && 
+            !errorText.includes('apple.com/wss/fonts') &&
+            !errorText.includes('Failed to load resource: net::ERR_FAILED')) {
+          console.error('Page console error:', errorText);
+        }
       }
     });
 

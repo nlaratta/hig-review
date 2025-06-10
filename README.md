@@ -7,6 +7,7 @@ An MCP (Model Context Protocol) server that provides programmatic access to Appl
 - 🔍 **Smart Search**: Fuzzy search across all Apple HIG documentation
 - 📖 **Content Retrieval**: Fetch specific guidelines with code examples and best practices
 - 🧭 **Navigation**: Browse documentation sections hierarchically
+- 🎥 **WWDC Integration**: Access related WWDC sessions and video content
 - ⚡ **Performance**: Multi-level caching for fast responses
 - 🔄 **Rate Limiting**: Respectful scraping of Apple's servers
 
@@ -22,6 +23,8 @@ HIGMcp/
 │   ├── parser/               # Content parsing with Cheerio
 │   ├── search/               # Fuzzy search with Fuse.js
 │   ├── cache/                # Multi-level caching
+│   ├── wwdc/                 # WWDC session integration
+│   ├── integration/          # HIG-WWDC linking
 │   └── types/                # TypeScript definitions
 ├── scripts/
 │   ├── index-content.ts      # Search index builder
@@ -103,6 +106,7 @@ Retrieve specific guideline content with examples and code.
 - `guidelineId` (required): Guideline ID or URL path
 - `includeExamples` (optional): Include design examples (default: true)
 - `includeCode` (optional): Include code samples (default: true)
+- `includeWWDC` (optional): Include related WWDC sessions (default: true)
 
 **Example:** "Get the color system guidelines for macOS"
 
@@ -115,7 +119,32 @@ Navigate documentation sections hierarchically.
 
 **Example:** "Browse the iOS components section"
 
-### 4. getServerInfo
+### 4. searchWWDC
+Search WWDC sessions related to HIG topics.
+
+**Parameters:**
+- `query` (required): Search query string
+- `year` (optional): Filter by specific year (e.g., 2023)
+- `platform` (optional): Filter by Apple platform
+- `searchIn` (optional): Search scope (all, titles, transcripts, code)
+- `includeCode` (optional): Include code examples (default: false)
+- `limit` (optional): Maximum results (default: 20)
+
+**Example:** "Find WWDC sessions about SwiftUI buttons"
+
+### 5. getSession
+Get detailed WWDC session information.
+
+**Parameters:**
+- `sessionId` (required): WWDC session ID
+- `includeTranscript` (optional): Include full transcript (default: false)
+- `includeCode` (optional): Include code examples (default: false)
+- `timestamp` (optional): Jump to specific timestamp
+- `includeRelatedGuidelines` (optional): Include related HIG guidelines (default: false)
+
+**Example:** "Get details for WWDC 2023 session 10115"
+
+### 6. getServerInfo
 Get server status and statistics.
 
 **Example:** "Show HIG server info"
@@ -147,13 +176,15 @@ npm run index:rebuild      # Rebuild from scratch
 ## Implementation Status
 
 - ✅ **Core MCP Server**: Full protocol implementation
-- ✅ **All 4 Tools**: searchHIG, getGuideline, browseSection, getServerInfo
+- ✅ **All 6 Tools**: searchHIG, getGuideline, browseSection, searchWWDC, getSession, getServerInfo
 - ✅ **Web Scraping**: Playwright-based scraper with rate limiting
 - ✅ **Content Parsing**: Structured extraction of guidelines, code, examples
 - ✅ **Search Engine**: Fuzzy search with Fuse.js
+- ✅ **WWDC Integration**: Session search, transcript parsing, HIG-WWDC linking
 - ✅ **Caching System**: Multi-level caching (memory + disk)
 - ✅ **Error Handling**: Comprehensive error handling and logging
 - ✅ **Testing Suite**: MCP protocol and component tests
+- ✅ **Real Data**: No mocks - all tools fetch live content from Apple's servers
 
 ## Contributing
 

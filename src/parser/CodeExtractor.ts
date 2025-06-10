@@ -1,4 +1,4 @@
-import { CodeBlock } from './ContentParser';
+import { CodeBlock } from './ContentParser.js';
 
 export class CodeExtractor {
   // Language mappings for Apple documentation

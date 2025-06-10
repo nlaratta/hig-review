@@ -1,4 +1,4 @@
-import { ContentSection, ImageData, TableData } from './ContentParser';
+import { ContentSection, ImageData, TableData } from './ContentParser.js';
 
 export class ContentExtractor {
   // Common selectors for Apple HIG pages

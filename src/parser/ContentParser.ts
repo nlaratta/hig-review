@@ -1,6 +1,6 @@
 import { JSDOM } from 'jsdom';
-import { ContentExtractor } from './ContentExtractor';
-import { CodeExtractor } from './CodeExtractor';
+import { ContentExtractor } from './ContentExtractor.js';
+import { CodeExtractor } from './CodeExtractor.js';
 
 export interface ParsedContent {
   title: string;

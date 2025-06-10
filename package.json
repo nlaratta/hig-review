@@ -19,6 +19,7 @@
     "index:incremental": "tsx scripts/index-content.ts --incremental",
     "index:test": "tsx scripts/index-content.ts --test",
     "index:rebuild": "tsx scripts/index-content.ts --rebuild-index",
+    "create-labels": "node scripts/create-github-labels.js",
     "create-issues": "node scripts/create-github-issues.js",
     "create-issues:dry": "node scripts/create-github-issues.js --dry-run",
     "create-issues:api": "node scripts/create-github-issues-api.js",

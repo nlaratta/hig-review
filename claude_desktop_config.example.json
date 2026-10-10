@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "apple-hig": {
+      "command": "node",
+      "args": ["/absolute/path/to/apple-hig-mcp/dist/index.js"]
+    }
+  }
+}

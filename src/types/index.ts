@@ -1,134 +1,62 @@
 /**
- * Type definitions for Apple HIG MCP Server
+ * Shared types and tool parameter schemas for the Apple HIG MCP server.
  */
 
 import { z } from 'zod';
 
-// Platform types
-export type ApplePlatform = 'ios' | 'macos' | 'watchos' | 'tvos' | 'visionos';
+export const PLATFORMS = ['ios', 'ipados', 'macos', 'watchos', 'tvos', 'visionos'] as const;
+export type ApplePlatform = (typeof PLATFORMS)[number];
 
-// Tool parameter schemas
 export const SearchHIGSchema = z.object({
-  query: z.string().describe('Search query for Apple HIG'),
-  platform: z.enum(['ios', 'macos', 'watchos', 'tvos', 'visionos']).optional(),
-  category: z.string().optional().describe('Category like foundations, components, patterns'),
+  query: z.string().min(1).describe('Search query for Apple HIG'),
+  platform: z.enum(PLATFORMS).optional(),
+  category: z
+    .string()
+    .optional()
+    .describe('Top-level category such as foundations, components, patterns, inputs, technologies'),
+  limit: z.number().int().min(1).max(25).optional().default(10),
 });
 
 export const GetGuidelineSchema = z.object({
-  guidelineId: z.string().describe('Specific guideline ID or URL path'),
+  guidelineId: z.string().min(1).describe('Page name or HIG URL, e.g. "buttons" or "components/buttons"'),
   includeExamples: z.boolean().optional().default(true),
   includeCode: z.boolean().optional().default(true),
 });
 
 export const BrowseSectionSchema = z.object({
-  section: z.string().describe('Section path like components/buttons'),
-  platform: z.enum(['ios', 'macos', 'watchos', 'tvos', 'visionos']),
+  section: z
+    .string()
+    .optional()
+    .default('')
+    .describe('Section name or path like "components" or "components/menus-and-actions"; empty for the top level'),
+  platform: z.enum(PLATFORMS).optional(),
 });
 
 export const GetServerInfoSchema = z.object({});
 
-// Type inference from schemas
 export type SearchHIGParams = z.infer<typeof SearchHIGSchema>;
 export type GetGuidelineParams = z.infer<typeof GetGuidelineSchema>;
 export type BrowseSectionParams = z.infer<typeof BrowseSectionSchema>;
 export type GetServerInfoParams = z.infer<typeof GetServerInfoSchema>;
 
-// Response types
-export interface HIGSearchResult {
-  id: string;
-  title: string;
-  description: string;
-  platform: ApplePlatform;
-  category: string;
-  url: string;
-  relevanceScore: number;
-}
-
-export interface HIGGuideline {
-  id: string;
-  title: string;
-  content: string;
-  platform: ApplePlatform;
-  category: string;
-  lastUpdated: string;
-  examples?: Example[];
-  codeSnippets?: CodeSnippet[];
-  relatedGuidelines?: string[];
-}
-
-export interface HIGSection {
-  path: string;
-  title: string;
-  description: string;
-  subsections?: HIGSection[];
-  guidelines?: GuidelineSummary[];
-}
-
-export interface Example {
-  title: string;
-  description: string;
-  imageUrl?: string;
-  code?: string;
-}
-
-export interface CodeSnippet {
-  language: 'swift' | 'objc' | 'swiftui';
-  code: string;
-  description?: string;
-}
-
-export interface GuidelineSummary {
-  id: string;
-  title: string;
-  description: string;
-}
-
-export interface ServerInfo {
-  name: string;
-  version: string;
-  status: 'running' | 'error' | 'initializing';
-  uptime: number;
-  capabilities: {
-    search: boolean;
-    cache: boolean;
-    scraping: boolean;
-  };
-  stats: {
-    totalGuidelines: number;
-    lastUpdate: string | null;
-    cacheSize: number;
-  };
-}
-
-// Error types
 export class HIGServerError extends Error {
   constructor(
     public code: string,
     message: string,
-    public details?: any
+    public details?: unknown
   ) {
     super(message);
     this.name = 'HIGServerError';
   }
 }
 
-// Configuration types
 export interface ServerConfig {
   cacheEnabled: boolean;
   cacheTTL: number;
-  maxConcurrentRequests: number;
-  scrapingEnabled: boolean;
+  cacheDir: string;
   debugMode: boolean;
 }
 
-// Cache types
-export interface CacheEntry<T> {
-  data: T;
-  timestamp: number;
-  expiresAt: number;
-}
-
-// Logger interface
 export interface Logger {
   info(message: string, data?: any): void;
   error(message: string, error?: any): void;

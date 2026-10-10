@@ -1,4 +1,5 @@
 import PQueue from 'p-queue';
+import { logger } from '../utils/logger.js';
 
 /**
  * RateLimiter - Manages request rate limiting to respect server resources
@@ -46,7 +47,7 @@ export class RateLimiter {
       try {
         return await fn();
       } catch (error) {
-        console.error('Error during rate-limited execution:', error);
+        logger.debug('Error during rate-limited execution', error);
         throw error;
       }
     }) as Promise<T>;
@@ -75,7 +76,7 @@ export class RateLimiter {
     const requestsInWindow = this.requestCount;
     const remainingRequests = this.maxRequestsPerMinute - requestsInWindow;
     
-    console.log(`Rate limit status: ${requestsInWindow}/${this.maxRequestsPerMinute} requests used, ${remainingRequests} remaining`);
+    logger.debug(`Rate limit status: ${requestsInWindow}/${this.maxRequestsPerMinute} requests used, ${remainingRequests} remaining`);
   }
 
   /**
@@ -97,7 +98,7 @@ export class RateLimiter {
    */
   public pause(): void {
     this.queue.pause();
-    console.log('Rate limiter paused');
+    logger.debug('Rate limiter paused');
   }
 
   /**
@@ -105,7 +106,7 @@ export class RateLimiter {
    */
   public start(): void {
     this.queue.start();
-    console.log('Rate limiter resumed');
+    logger.debug('Rate limiter resumed');
   }
 
   /**
@@ -113,7 +114,7 @@ export class RateLimiter {
    */
   public clear(): void {
     this.queue.clear();
-    console.log('Rate limiter queue cleared');
+    logger.debug('Rate limiter queue cleared');
   }
 
   /**
@@ -129,9 +130,9 @@ export class RateLimiter {
    */
   public static createAppleRateLimiter(): RateLimiter {
     return new RateLimiter(
-      30,   // 30 requests per minute (0.5 requests per second)
-      2,    // Max 2 concurrent requests
-      2000  // 2 second minimum delay between requests
+      60,   // at most 60 requests per minute
+      1,    // one request at a time
+      600   // at least 600ms between requests
     );
   }
 }
@@ -177,7 +178,7 @@ export class ExponentialBackoff {
         
         if (attempt < maxRetries && shouldRetry(error)) {
           const delay = this.getDelay(attempt);
-          console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms delay`);
+          logger.debug(`Retry attempt ${attempt + 1}/${maxRetries} after ${delay}ms delay`);
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
           break;

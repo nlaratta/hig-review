@@ -1,164 +1,105 @@
-# Apple HIG MCP Server
+<p align="center">
+  <img src=".github/banner.png" alt="Apple HIG MCP" width="100%">
+</p>
 
-An MCP (Model Context Protocol) server that provides programmatic access to Apple's Human Interface Guidelines through Claude Desktop.
+<p align="center">
+  <a href="https://github.com/nlaratta/apple-hig-mcp/actions/workflows/ci.yml"><img src="https://github.com/nlaratta/apple-hig-mcp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2D6A4F" alt="MIT license"></a>
+</p>
 
-## Features
+An MCP server that lets Claude search and read Apple's [Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/) while you design or build for Apple platforms. It fetches the live pages at runtime, so answers track the current guidelines.
 
-- 🔍 **Smart Search**: Fuzzy search across all Apple HIG documentation
-- 📖 **Content Retrieval**: Fetch specific guidelines with code examples and best practices
-- 🧭 **Navigation**: Browse documentation sections hierarchically
-- ⚡ **Performance**: Multi-level caching for fast responses
-- 🔄 **Rate Limiting**: Respectful scraping of Apple's servers
+Unofficial: not affiliated with or endorsed by Apple. The guidelines are Apple's content and are never bundled in this repository; see [Content and copyright](#content-and-copyright).
 
-## Project Structure
+## Quick start
 
-```
-HIGMcp/
-├── src/
-│   ├── index.ts              # Entry point
-│   ├── server.ts             # MCP server implementation
-│   ├── tools/                # MCP tool implementations
-│   ├── scraper/              # Web scraping with Playwright
-│   ├── parser/               # Content parsing with Cheerio
-│   ├── search/               # Fuzzy search with Fuse.js
-│   ├── cache/                # Multi-level caching
-│   └── types/                # TypeScript definitions
-├── scripts/
-│   ├── index-content.ts      # Search index builder
-│   └── test-mcp.js           # MCP protocol tester
-├── docs/                     # Implementation reports
-├── CLAUDE.md                 # Guide for Claude instances
-└── cache/                    # Cache storage
+Requires Node.js 20 or newer.
+
+```bash
+git clone https://github.com/nlaratta/apple-hig-mcp.git
+cd apple-hig-mcp
+npm install
+npm run build
 ```
 
-## Installation
+**Claude Code**
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/yourusername/HIGMcp.git
-   cd HIGMcp
-   ```
+```bash
+claude mcp add apple-hig -- node "$(pwd)/dist/index.js"
+```
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Build the project:**
-   ```bash
-   npm run build
-   ```
-
-4. **Build search index (optional but recommended):**
-   ```bash
-   npm run index
-   ```
-
-## Configuration
-
-### Claude Desktop Setup
-
-Add to your `claude_desktop_config.json`:
+**Claude Desktop**: add this to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`, Windows: `%APPDATA%\Claude\claude_desktop_config.json`), using the absolute path to your clone, then restart Claude Desktop:
 
 ```json
 {
   "mcpServers": {
     "apple-hig": {
       "command": "node",
-      "args": ["/absolute/path/to/HIGMcp/dist/index.js"]
+      "args": ["/absolute/path/to/apple-hig-mcp/dist/index.js"]
     }
   }
 }
 ```
 
-**Config file locations:**
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-- Linux: `~/.config/Claude/claude_desktop_config.json`
+Then ask things like "What do the HIG say about button hit regions?" or "Compare the guidance for sheets and popovers".
 
-### Environment Variables (Optional)
+## Tools
 
-- `CACHE_ENABLED`: Enable/disable caching (default: `true`)
-- `CACHE_TTL`: Cache time-to-live in ms (default: `3600000`)
-- `MAX_CONCURRENT_REQUESTS`: Max concurrent scraping requests (default: `10`)
-- `SCRAPING_ENABLED`: Enable/disable web scraping (default: `true`)
-- `DEBUG`: Enable debug logging (default: `false`)
+| Tool | What it does |
+| --- | --- |
+| `searchHIG` | Ranked search over page titles, names and summaries. Optional `platform` (`ios`, `ipados`, `macos`, `watchos`, `tvos`, `visionos`), `category` (`foundations`, `components`, `patterns`, `inputs`, `technologies`, `getting-started`) and `limit`. |
+| `getGuideline` | Returns a full page as Markdown. Accepts a page id (`buttons`), a path (`components/buttons`) or a HIG URL. `includeExamples` toggles text descriptions of the page's images and videos. |
+| `browseSection` | Lists the table of contents: the top level, or the pages inside a section such as `components` or `menus-and-actions`. Optional `platform` filter. |
+| `getServerInfo` | Version, cache location and catalog status. |
 
-## Available Tools
+Search covers page titles, names and summaries, not full body text. Use `getGuideline` to read a page.
 
-### 1. searchHIG
-Search Apple's Human Interface Guidelines with fuzzy matching.
+## How it works
 
-**Parameters:**
-- `query` (required): Search term
-- `platform` (optional): ios, macos, watchos, tvos, visionos
-- `category` (optional): foundations, components, patterns
+Apple's HIG site is a JavaScript app, but each page is backed by a JSON document at `https://developer.apple.com/tutorials/data/design/human-interface-guidelines/<page>.json`, the same data the site renders. The server fetches that JSON directly (no browser needed), converts it to Markdown, and builds a table of contents by walking the section pages (about 20 requests, once per cache lifetime).
 
-**Example:** "Search for button guidelines in iOS"
+- **Polite by default:** a descriptive `User-Agent`, one request at a time with a minimum delay between requests, retry with backoff, and a 24-hour cache in memory and on disk.
+- **Cache location:** `~/.cache/apple-hig-mcp` (or `$XDG_CACHE_HOME/apple-hig-mcp`), outside the repository. Delete it any time.
+- **Offline fallback:** if Apple is unreachable, a stale cached copy is served when one exists.
 
-### 2. getGuideline
-Retrieve specific guideline content with examples and code.
+Environment variables (all optional):
 
-**Parameters:**
-- `guidelineId` (required): Guideline ID or URL path
-- `includeExamples` (optional): Include design examples (default: true)
-- `includeCode` (optional): Include code samples (default: true)
-
-**Example:** "Get the color system guidelines for macOS"
-
-### 3. browseSection
-Navigate documentation sections hierarchically.
-
-**Parameters:**
-- `section` (required): Section path (e.g., "components/buttons")
-- `platform` (required): Target platform
-
-**Example:** "Browse the iOS components section"
-
-### 4. getServerInfo
-Get server status and statistics.
-
-**Example:** "Show HIG server info"
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `CACHE_ENABLED` | `true` | Set `false` to disable the disk cache |
+| `CACHE_TTL` | `86400000` | Cache lifetime in milliseconds |
+| `HIG_CACHE_DIR` | `~/.cache/apple-hig-mcp` | Where cached responses are stored |
+| `DEBUG` | `false` | Verbose logging to stderr |
 
 ## Development
 
 ```bash
-# Development mode with auto-reload
-npm run dev:mcp
-
-# Build TypeScript
-npm run build
-
-# Run tests
-npm run test:mcp
-
-# Test content parser
-npm run test-parser
-
-# Watch mode
-npm run watch
-
-# Manage search index
-npm run index              # Build initial index
-npm run index:incremental  # Update incrementally
-npm run index:rebuild      # Rebuild from scratch
+npm run dev      # run from source with tsx
+npm test         # fast unit tests (vitest), no network
+npm run smoke    # build, then call every tool over stdio against the live site (needs network)
 ```
 
-## Implementation Status
+## Project structure
 
-- ✅ **Core MCP Server**: Full protocol implementation
-- ✅ **All 4 Tools**: searchHIG, getGuideline, browseSection, getServerInfo
-- ✅ **Web Scraping**: Playwright-based scraper with rate limiting
-- ✅ **Content Parsing**: Structured extraction of guidelines, code, examples
-- ✅ **Search Engine**: Fuzzy search with Fuse.js
-- ✅ **Caching System**: Multi-level caching (memory + disk)
-- ✅ **Error Handling**: Comprehensive error handling and logging
-- ✅ **Testing Suite**: MCP protocol and component tests
+```
+src/
+  index.ts          entry point (stdio)
+  server.ts         MCP tool definitions and request handling
+  hig/
+    client.ts       fetch + rate limiting + cache for Apple's JSON
+    catalog.ts      table of contents built from section pages
+    search.ts       ranking (lexical tiers, then fuzzy via Fuse.js)
+    render.ts       Apple's JSON content to Markdown
+    service.ts      the logic behind each tool
+tests/              unit tests with small hand-written fixtures
+scripts/smoke.mjs   end-to-end check over stdio
+docs/ARCHITECTURE.md
+```
 
-## Contributing
+## Content and copyright
 
-See [CLAUDE.md](CLAUDE.md) for architecture details and development guidelines.
+All guideline text and imagery belong to Apple Inc. This project does not include or redistribute any of it: pages are fetched from Apple's servers when you use a tool, cached locally on your machine, and returned with a link to the original page. Please follow [Apple's terms of use](https://www.apple.com/legal/internet-services/terms/site.html) and keep request volume reasonable. The tests use tiny synthetic fixtures, not copies of Apple's pages. "Apple" and related marks are trademarks of Apple Inc.
 
 ## License
 
-This project is for educational and development purposes. Please respect Apple's Human Interface Guidelines usage terms.
+[MIT](LICENSE) © Noah Laratta

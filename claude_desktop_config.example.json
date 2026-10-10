@@ -2,8 +2,7 @@
   "mcpServers": {
     "apple-hig": {
       "command": "node",
-      "args": ["/Users/username/Desktop/HIGMcp/dist/index.js"],
-      "env": {}
+      "args": ["/absolute/path/to/apple-hig-mcp/dist/index.js"]
     }
   }
 }

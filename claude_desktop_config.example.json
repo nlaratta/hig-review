@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "apple-hig": {
+    "hig-review": {
       "command": "node",
-      "args": ["/absolute/path/to/apple-hig-mcp/dist/index.js"]
+      "args": ["/absolute/path/to/hig-review/plugin/server.mjs"]
     }
   }
 }

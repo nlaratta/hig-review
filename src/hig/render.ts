@@ -42,7 +42,7 @@ class Renderer {
           case 'text':
             return n.text ?? '';
           case 'codeVoice':
-            return `\`${n.text ?? ''}\``;
+            return `\`${String(n.code ?? n.text ?? '')}\``;
           case 'strong':
             return `**${this.inline(n.inlineContent)}**`;
           case 'emphasis':

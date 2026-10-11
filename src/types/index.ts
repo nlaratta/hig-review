@@ -1,5 +1,5 @@
 /**
- * Shared types and tool parameter schemas for the Apple HIG MCP server.
+ * Shared types and tool parameter schemas for hig-review.
  */
 
 import { z } from 'zod';
@@ -20,7 +20,6 @@ export const SearchHIGSchema = z.object({
 export const GetGuidelineSchema = z.object({
   guidelineId: z.string().min(1).describe('Page name or HIG URL, e.g. "buttons" or "components/buttons"'),
   includeExamples: z.boolean().optional().default(true),
-  includeCode: z.boolean().optional().default(true),
 });
 
 export const BrowseSectionSchema = z.object({
@@ -34,10 +33,32 @@ export const BrowseSectionSchema = z.object({
 
 export const GetServerInfoSchema = z.object({});
 
+export const HigChecklistSchema = z.object({
+  components: z.array(z.string().min(1)).min(1).max(30),
+  platform: z.enum(PLATFORMS).optional(),
+});
+
+export const ReviewSwiftUISchema = z.object({
+  code: z.string().min(1).optional(),
+  path: z.string().min(1).optional(),
+  platform: z.enum(PLATFORMS).optional().default('ios'),
+});
+
+export const CheckContrastSchema = z.object({
+  foreground: z.string().min(1),
+  background: z.string().min(1),
+  backdrop: z.string().min(1).optional(),
+  fontSizePt: z.number().positive().max(1000).optional(),
+  bold: z.boolean().optional(),
+});
+
 export type SearchHIGParams = z.infer<typeof SearchHIGSchema>;
 export type GetGuidelineParams = z.infer<typeof GetGuidelineSchema>;
 export type BrowseSectionParams = z.infer<typeof BrowseSectionSchema>;
 export type GetServerInfoParams = z.infer<typeof GetServerInfoSchema>;
+export type HigChecklistParams = z.infer<typeof HigChecklistSchema>;
+export type ReviewSwiftUIParams = z.infer<typeof ReviewSwiftUISchema>;
+export type CheckContrastParams = z.infer<typeof CheckContrastSchema>;
 
 export class HIGServerError extends Error {
   constructor(

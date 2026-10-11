@@ -100,11 +100,11 @@ export class HIGService {
     if (hits.length === 0) {
       return `No results for "${params.query}"${params.category ? ` in category "${params.category}"` : ''}${
         params.platform ? ` for ${params.platform}` : ''
-      }. Try browseSection to see what is available.`;
+      }. Try browse_hig to see what is available.`;
     }
     const body = hits.map((h, i) => `${i + 1}. ${line(h.entry)}\n   id: ${h.entry.slug} | category: ${h.entry.path[0]}`);
     return [
-      `Found ${hits.length} result${hits.length === 1 ? '' : 's'} for "${params.query}" (searches page titles, names and summaries; use getGuideline to read a page):`,
+      `Found ${hits.length} result${hits.length === 1 ? '' : 's'} for "${params.query}" (searches page titles, names and summaries; use get_guideline to read a page):`,
       '',
       body.join('\n\n'),
     ].join('\n');
@@ -162,7 +162,7 @@ export class HIGService {
       if (!entry.isGroup) {
         const doc = await this.client.getDoc(slug);
         const heads = extractHeadings(doc).filter((h) => h.level <= 3);
-        outline = `\nThis is a page, not a section. Its outline:\n${heads.map((h) => `${'  '.repeat(h.level - 2)}- ${h.text}`).join('\n')}\nUse getGuideline with id "${slug}" to read it.\n`;
+        outline = `\nThis is a page, not a section. Its outline:\n${heads.map((h) => `${'  '.repeat(h.level - 2)}- ${h.text}`).join('\n')}\nUse get_guideline with id "${slug}" to read it.\n`;
       }
     }
 

@@ -2,7 +2,7 @@ node_modules/
 dist/
 coverage/
 
-# Local response cache (the server writes to ~/.cache/apple-hig-mcp by default;
+# Local response cache (the server writes to ~/.cache/hig-review by default;
 # these cover a cache dir pointed inside the repo). Never commit Apple's content.
 cache/
 .cache/
@@ -19,3 +19,6 @@ cache/
 
 # Personal Claude Desktop config
 claude_desktop_config.json
+
+# Scratch files
+*.tmp.ts

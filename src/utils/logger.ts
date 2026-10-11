@@ -9,7 +9,7 @@ export class MCPLogger implements Logger {
   private prefix: string;
   private debugMode: boolean;
 
-  constructor(prefix: string = 'apple-hig-mcp', debugMode: boolean = false) {
+  constructor(prefix: string = 'hig-review', debugMode: boolean = false) {
     this.prefix = prefix;
     this.debugMode = debugMode;
   }
@@ -70,4 +70,4 @@ export class MCPLogger implements Logger {
 }
 
 // Create a singleton logger instance
-export const logger = new MCPLogger('apple-hig-mcp', process.env.DEBUG === 'true');
+export const logger = new MCPLogger('hig-review', process.env.DEBUG === 'true');

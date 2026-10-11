@@ -1,22 +1,26 @@
 {
-  "name": "apple-hig-mcp",
-  "version": "0.2.0",
-  "description": "Unofficial MCP server for searching and reading Apple's Human Interface Guidelines",
+  "name": "hig-review",
+  "version": "0.3.0",
+  "description": "Review Apple-platform UI against Apple's Human Interface Guidelines: cited checklists, SwiftUI heuristics and contrast checks (MCP server and Claude Code plugin)",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "apple-hig-mcp": "dist/index.js"
+    "hig-review": "dist/index.js"
   },
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "build": "tsc",
+    "bundle": "node scripts/bundle.mjs",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
     "smoke": "npm run build && node scripts/smoke.mjs",
-    "clean": "rm -rf dist"
+    "validate:plugin": "node scripts/validate-plugin.mjs",
+    "clean": "rm -rf dist",
+    "smoke:bundle": "npm run build && node scripts/smoke.mjs --bundle",
+    "docs:rules": "npm run build && node scripts/rules-doc.mjs"
   },
   "license": "MIT",
   "private": true,
@@ -28,6 +32,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
+    "esbuild": "0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"

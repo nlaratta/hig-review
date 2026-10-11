@@ -31,6 +31,8 @@ export interface HIGClientOptions {
   cacheDir: string | null;
   fetchImpl?: typeof fetch;
   rateLimiter?: RateLimiter;
+  /** Retries after a failed request (default 3, with exponential backoff). */
+  retries?: number;
 }
 
 interface CacheRecord {
@@ -38,11 +40,20 @@ interface CacheRecord {
   doc: HIGDoc;
 }
 
+/** A page plus where it came from, so callers can tell live data from a stale fallback. */
+export interface DocInfo {
+  doc: HIGDoc;
+  /** When the copy was fetched from Apple (ms since epoch). */
+  fetchedAt: number;
+  /** True when Apple could not be reached and an expired cached copy was served instead. */
+  stale: boolean;
+}
+
 const SLUG_RE = /^[a-z0-9][a-z0-9._-]*$/i;
 
 export class HIGClient {
   private memory = new Map<string, CacheRecord>();
-  private inflight = new Map<string, Promise<HIGDoc>>();
+  private inflight = new Map<string, Promise<DocInfo>>();
   private limiter: RateLimiter;
   private backoff = new ExponentialBackoff(1000, 15000, 2);
   private fetchImpl: typeof fetch;
@@ -55,18 +66,23 @@ export class HIGClient {
 
   /** Fetch a page document. `slug` is the page name ("buttons"); '' is the top-level index. */
   public async getDoc(slug: string): Promise<HIGDoc> {
+    return (await this.getDocInfo(slug)).doc;
+  }
+
+  /** Like getDoc, but also reports when the copy was fetched and whether it is a stale fallback. */
+  public async getDocInfo(slug: string): Promise<DocInfo> {
     if (slug !== '' && !SLUG_RE.test(slug)) {
       throw new HIGNotFoundError(slug);
     }
     const key = slug || '_root';
 
     const mem = this.memory.get(key);
-    if (mem && this.isFresh(mem)) return mem.doc;
+    if (mem && this.isFresh(mem)) return { doc: mem.doc, fetchedAt: mem.fetchedAt, stale: false };
 
     const disk = await this.readDisk(key);
     if (disk && this.isFresh(disk)) {
       this.memory.set(key, disk);
-      return disk.doc;
+      return { doc: disk.doc, fetchedAt: disk.fetchedAt, stale: false };
     }
 
     const pending = this.inflight.get(key);
@@ -85,24 +101,24 @@ export class HIGClient {
     return Date.now() - rec.fetchedAt < this.opts.ttlMs;
   }
 
-  private async fetchRemote(slug: string, key: string, stale?: CacheRecord): Promise<HIGDoc> {
+  private async fetchRemote(slug: string, key: string, stale?: CacheRecord): Promise<DocInfo> {
     const url = slug ? `${HIG_DATA_BASE}/${slug}.json` : `${HIG_DATA_BASE}.json`;
     try {
       const doc = await this.limiter.execute(() =>
         this.backoff.execute(
           () => this.request(url, slug),
-          3,
+          this.opts.retries ?? 3,
           (err) => !(err instanceof HIGNotFoundError)
         )
       );
       const rec: CacheRecord = { fetchedAt: Date.now(), doc };
       this.memory.set(key, rec);
       await this.writeDisk(key, rec);
-      return doc;
+      return { doc, fetchedAt: rec.fetchedAt, stale: false };
     } catch (err) {
       if (stale && !(err instanceof HIGNotFoundError)) {
         logger.warn('Fetch failed, serving stale cached copy', { slug, error: String(err) });
-        return stale.doc;
+        return { doc: stale.doc, fetchedAt: stale.fetchedAt, stale: true };
       }
       throw err;
     }

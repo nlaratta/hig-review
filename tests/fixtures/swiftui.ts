@@ -34,6 +34,17 @@ export const FIXTURES: Record<string, HeuristicFixture> = {
     .frame(width: 20, height: 20)
     .contentShape(Rectangle())
 }`,
+      // label: passed as an argument closure.
+      `Button(action: go, label: { Image(systemName: "plus").frame(width: 20, height: 20) })`,
+      // Link(destination:) with a label closure.
+      `Link(destination: url) {
+  Image(systemName: "safari").frame(width: 20, height: 20)
+}`,
+      // Button-style Toggle with a label closure.
+      `Toggle(isOn: $starred) {
+  Image(systemName: "star").frame(width: 20, height: 20)
+}
+.toggleStyle(.button)`,
       // padding(1) makes it 22x22, still below 28x28.
       `Button { go() } label: {
   Image(systemName: "plus")
@@ -53,6 +64,19 @@ export const FIXTURES: Record<string, HeuristicFixture> = {
     .contentShape(Rectangle())
 }`,
       `Button("Wide") { go() }.frame(minWidth: 20, minHeight: 20)`,
+      `Button(action: go, label: { Image(systemName: "plus").frame(width: 44, height: 44) })`,
+      `Link(destination: url) {
+  Image(systemName: "safari").frame(width: 44, height: 44)
+}`,
+      `Toggle(isOn: $starred) {
+  Image(systemName: "star").frame(width: 44, height: 44)
+}
+.toggleStyle(.button)`,
+      // Switch-style toggle: the switch is the control, not the label.
+      `Toggle(isOn: $wifi) {
+  Image(systemName: "wifi").frame(width: 20, height: 20)
+}`,
+      `Link("Docs", destination: url)`,
       // Nested frames don't establish the label's bounds (an HStack of two 24x44 views is wider).
       `Button { go() } label: {
   HStack(spacing: 8) {
@@ -187,6 +211,15 @@ var body: some View { Text("Scaled").font(.system(size: titleSize)) }`,
   },
   'alert-button-count': {
     flag: [
+      // A Group is descended into: four buttons show at once.
+      `.alert("Export", isPresented: $showing) {
+  Group {
+    Button("PDF") {}
+    Button("PNG") {}
+    Button("SVG") {}
+    Button("Cancel", role: .cancel) {}
+  }
+}`,
       // Two always-shown buttons plus a branch that adds two more.
       `.alert("Sync", isPresented: $showing) {
   Button("Retry") { retry() }
@@ -212,6 +245,38 @@ var body: some View { Text("Scaled").font(.system(size: titleSize)) }`,
 }`,
       `.alert("Choose", isPresented: $showing) {
   ForEach(options) { option in Button(option.name) { pick(option) } }
+}`,
+      // Exclusive branches inside a Group.
+      `.alert("Changes", isPresented: $showing) {
+  Group {
+    if editing {
+      Button("Save") { save() }
+      Button("Discard", role: .destructive) { discard() }
+    } else {
+      Button("Edit") { edit() }
+      Button("Close", role: .cancel) {}
+    }
+  }
+}`,
+      // Exclusive branches in an actions: argument closure.
+      `.alert("Changes", isPresented: $showing, actions: {
+  if editing {
+    Button("Save") { save() }
+    Button("Discard", role: .destructive) { discard() }
+  } else {
+    Button("Edit") { edit() }
+    Button("Close", role: .cancel) {}
+  }
+})`,
+      // A closure inside the if condition is not the branch body.
+      `.alert("Pick", isPresented: $showing) {
+  if values.contains(where: { $0 > 1 }) {
+    Button("A") {}
+    Button("B") {}
+  } else {
+    Button("C") {}
+    Button("D") {}
+  }
 }`,
       // Mutually exclusive branches: at most two buttons show at once.
       `.alert("Changes", isPresented: $showing) {
@@ -243,6 +308,17 @@ var body: some View { Text("Scaled").font(.system(size: titleSize)) }`,
   Text("3M").tag(3); Text("1Y").tag(4); Text("5Y").tag(5)
 }
 .pickerStyle(.menu)`,
+      // Exclusive branches inside a Group, four segments each.
+      `Picker("Range", selection: $range) {
+  Group {
+    if intraday {
+      Text("1H").tag(0); Text("4H").tag(1); Text("1D").tag(2); Text("1W").tag(3)
+    } else {
+      Text("1M").tag(0); Text("3M").tag(1); Text("1Y").tag(2); Text("5Y").tag(3)
+    }
+  }
+}
+.pickerStyle(.segmented)`,
       // Exclusive branches with four segments each.
       `Picker("Range", selection: $range) {
   if intraday {

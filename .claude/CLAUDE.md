@@ -30,7 +30,8 @@ claude plugin validate --strict .
 - A rule may only claim platforms its source page lists in `supported-platforms` and that any
   platform-specific heading above the sentence ("watchOS", "iOS, iPadOS") covers; numbers in `check`
   must be backed by `data` (and appear in the cited text). Tests and the smoke test enforce this.
-- Paraphrases keep Apple's hedges: "consider", "prefer" and "ideally" never become "must".
+- Paraphrases keep Apple's hedges: "consider", "prefer" and "ideally" never become "must", and
+  a paraphrase never adds a hedge the source sentence doesn't have (verify checks this live).
 - `docs/RULES.md` is generated: run `npm run docs:rules` after changing rules or heuristics.
 - Every SwiftUI heuristic needs positive and negative fixtures in `tests/fixtures/swiftui.ts`
   (synthetic code only).

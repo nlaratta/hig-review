@@ -6,13 +6,15 @@
  */
 
 import type { ApplePlatform } from '../types/index.js';
-import { ruleFor, type Severity } from '../rules/registry.js';
+import { appliesTo, ruleById, ruleFor, type Severity } from '../rules/registry.js';
 import { SwiftSource, lineAt, linesText, maskInactivePlatforms, matchForward } from './lexer.js';
 import {
   Bounds,
   Call,
   Modifier,
+  Range,
   boundsFromChain,
+  branchConfigs,
   countBranchAware,
   enclosingCallName,
   enclosingCallNames,
@@ -48,7 +50,7 @@ export const HEURISTICS: HeuristicInfo[] = [
   {
     id: 'hit-target-size',
     ruleIds: ['controls.size.<platform>'],
-    description: 'Button, Link, Toggle, Menu or onTapGesture view whose bounds are readable: a literal .frame on the control, or on the label\'s single root view plus literal padding. Below the platform minimum is high, below the default is medium; non-literal padding makes it a low-severity advisory. Frames on nested views are not used.',
+    description: 'Button, Link, button-style Toggle, Menu or onTapGesture view whose bounds are readable: a literal .frame on the control, or on the label\'s single root view (label: argument, label: trailing closure, Button(action:) { }, Link(destination:) { }, Toggle(isOn:) { }) plus literal padding. Below the platform minimum is high, below the default is medium; non-literal padding makes it a low-severity advisory. Frames on nested views are not used.',
     falsePositives: 'Hit area enlarged by a custom ButtonStyle or a parent view; decorative images are never checked.',
   },
   {
@@ -96,13 +98,13 @@ export const HEURISTICS: HeuristicInfo[] = [
   {
     id: 'alert-button-count',
     ruleIds: ['alert.max-buttons', 'actionsheet.max-buttons.watchos'],
-    description: '.alert actions with more than three Buttons shown at once (if/else branches count as alternatives; ForEach/switch skip the check); on watchOS, .confirmationDialog with more than four including Cancel.',
+    description: '.alert actions with more than three Buttons shown at once (if/else branches are alternatives, Group/Section/stacks are descended into, ForEach/switch skip the check); on watchOS, .confirmationDialog with more than four including the Cancel the system adds to any alternative without one.',
     falsePositives: 'Conditions that are never true together across separate if statements.',
   },
   {
     id: 'segmented-count',
     ruleIds: ['segmented.count'],
-    description: 'Picker with .segmented style and more literal .tag() options than the HIG suggests (5 on iPhone, 7 in wide layouts); if/else branches count as alternatives, ForEach/switch skip the check.',
+    description: 'Picker with .segmented style and more literal .tag() options than the HIG suggests (5 on iPhone, 7 in wide layouts); if/else branches are alternatives, Group/Section/stacks are descended into, ForEach/switch skip the check.',
     falsePositives: 'iPad-only or Mac layouts reviewed with platform "ios"; pass the right platform.',
   },
   {
@@ -179,6 +181,8 @@ function checkHitTargets(ctx: Ctx) {
   };
 
   for (const { call, chain } of callsNamed(ctx.m, TAPPABLE)) {
+    // Switch-style toggles: the switch, not the label, is the control. Only button-style toggles count.
+    if (call.name === 'Toggle' && !chain.some((x) => x.name === 'toggleStyle' && /\.button\b|ButtonToggleStyle/.test(slice(ctx.m, x.args)))) continue;
     // A frame on the control itself sets its bounds; padding outside the control is not tappable.
     const own = boundsFromChain(ctx.m, chain.filter((x) => x.name === 'frame'));
     if (own) {
@@ -188,11 +192,9 @@ function checkHitTargets(ctx: Ctx) {
     }
     if (chain.some((x) => x.name === 'frame')) continue; // flexible frame on the control: can't tell
     // Otherwise only the label's root view can establish bounds (its frame plus literal padding).
-    const label =
-      call.closures.find((c) => c.label === 'label') ??
-      (call.closures.length >= 2 ? call.closures[1] : call.closures.length === 1 && /\baction\s*:/.test(slice(ctx.m, call.args)) ? call.closures[0] : undefined);
+    const label = labelRange(ctx.m, call);
     if (!label) continue;
-    const root = rootExpression(ctx.m, label.body);
+    const root = rootExpression(ctx.m, label);
     const bounds = root ? boundsFromChain(ctx.m, root.mods) : null;
     if (bounds) {
       judge(bounds, call.start, call.end, `${call.name} label (${root!.head})`);
@@ -207,6 +209,35 @@ function checkHitTargets(ctx: Ctx) {
     const bounds = boundsFromChain(ctx.m, before);
     if (!bounds) continue;
     judge(bounds, head.start, x.index! + 13, `Tappable ${head.name}`);
+  }
+}
+
+/**
+ * The label closure of a Button, Link, Toggle or Menu, whichever initializer form is used:
+ * `label: { … }` as an argument or a labeled trailing closure; `Button(action:) { label }`;
+ * `Link(destination:) { label }`; `Toggle(isOn:) { label }`. Null for titled forms ("Title").
+ */
+export function labelRange(m: string, call: Call): Range | null {
+  const args = slice(m, call.args);
+  const arg = /\blabel\s*:\s*\{/.exec(args);
+  if (arg) {
+    const open = call.args![0] + arg.index + arg[0].length - 1;
+    const close = matchForward(m, open);
+    return close > 0 ? [open + 1, close] : null;
+  }
+  const labeled = call.closures.find((c) => c.label === 'label');
+  if (labeled) return labeled.body;
+  if (/^\s*("|LocalizedStringKey\b|String\b|verbatim\s*:)/.test(args)) return null;
+  const unlabeled = call.closures.filter((c) => c.label === null);
+  switch (call.name) {
+    case 'Button':
+      // Button(action: f) { label }; Button { action } label: { … } is handled above.
+      return /\baction\s*:/.test(args) && unlabeled.length === 1 ? unlabeled[0].body : null;
+    case 'Link':
+    case 'Toggle':
+      return unlabeled.length === 1 ? unlabeled[0].body : null;
+    default:
+      return null;
   }
 }
 
@@ -466,8 +497,10 @@ function checkScreenBounds(ctx: Ctx) {
 // ------------------------------------------------------------------ alerts and dialogs
 
 /** Buttons shown at once: if/else branches count as alternatives; ForEach/switch make it unknown. */
+const BUTTON = /(?<![.\w])Button\s*[({]/;
+
 function countButtons(text: string): number | null {
-  return countBranchAware(text, /(?<![.\w])Button\s*[({]/);
+  return countBranchAware(text, BUTTON);
 }
 
 const hasBranches = (text: string) => /(?<![\w#.])if\b/.test(text);
@@ -481,7 +514,7 @@ function checkAlerts(ctx: Ctx) {
       const inArgs = /\bactions\s*:\s*\{/.exec(slice(ctx.m, call.args));
       if (!inArgs) continue;
       const open = call.args![0] + inArgs.index + inArgs[0].length - 1;
-      text = ctx.m.slice(open, matchForward(ctx.m, open) + 1);
+      text = ctx.m.slice(open + 1, matchForward(ctx.m, open)); // closure body, without its braces
     }
     if (/(?<![.\w])Alert\s*\(/.test(text)) continue; // legacy Alert(...) API
     const n = countButtons(text);
@@ -502,9 +535,10 @@ function checkAlerts(ctx: Ctx) {
     const actions = call.closures.find((c) => c.label === null || c.label === 'actions');
     if (!actions) continue;
     const text = slice(ctx.m, actions.body);
-    const n = countButtons(text);
-    if (n === null) continue;
-    const total = n + (/role\s*:\s*\.cancel\b/.test(text) ? 0 : 1);
+    const configs = branchConfigs(text, BUTTON);
+    if (!configs) continue;
+    // Per alternative: its buttons, plus the Cancel the system adds when that alternative has none.
+    const total = Math.max(...configs.map((c) => c.count + (c.cancel ? 0 : 1)));
     if (total <= 4) continue;
     add(ctx, {
       check: 'alert-button-count',
@@ -543,6 +577,12 @@ function checkSegmented(ctx: Ctx) {
   }
 }
 
+/** True when the finding's rule exists and applies to `platform`. */
+export function findingApplies(f: Pick<RawFinding, 'ruleId'>, platform: ApplePlatform): boolean {
+  const rule = ruleById(f.ruleId);
+  return !!rule && appliesTo(rule, platform);
+}
+
 export function runHeuristics(src: SwiftSource, platform: ApplePlatform): RawFinding[] {
   // Code inside `#if os(...)` branches that don't apply to this platform is blanked first.
   const ctx: Ctx = { src, m: maskInactivePlatforms(src.masked, platform), platform, out: [] };
@@ -555,5 +595,9 @@ export function runHeuristics(src: SwiftSource, platform: ApplePlatform): RawFin
   checkScreenBounds(ctx);
   checkAlerts(ctx);
   checkSegmented(ctx);
-  return ctx.out.sort((a, b) => a.lines[0] - b.lines[0] || a.check.localeCompare(b.check));
+  // A finding is only returned when its rule applies to the platform under review (for example,
+  // Dark Mode rules don't cover watchOS or visionOS). Enforced here, for every check.
+  return ctx.out
+    .filter((f) => findingApplies(f, platform))
+    .sort((a, b) => a.lines[0] - b.lines[0] || a.check.localeCompare(b.check));
 }

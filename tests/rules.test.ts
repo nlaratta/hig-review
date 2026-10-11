@@ -4,7 +4,7 @@ import { COMPONENTS, RULES, SEVERITIES, appliesTo, ruleFor } from '../src/rules/
 import { Citer, citeFromDoc, findUnits, flattenDoc, normalize, splitSentences } from '../src/rules/citation.js';
 import { buildChecklist, resolveComponent, selectRules } from '../src/rules/checklist.js';
 import { checkContrast, composite, contrastRatio, parseColor } from '../src/rules/contrast.js';
-import { checkRule, dataProblems, headingPlatforms } from '../src/rules/verify.js';
+import { checkRule, dataProblems, hedgeProblem, headingPlatforms, verifyRegistry } from '../src/rules/verify.js';
 import { HIGClient } from '../src/hig/client.js';
 import { RateLimiter } from '../src/hig/RateLimiter.js';
 import { PLATFORMS, type ApplePlatform } from '../src/types/index.js';
@@ -232,6 +232,54 @@ describe('citations', () => {
       expect(r.platforms, r.id).not.toBe('all');
     }
     expect(plat('dark.both-modes')).toEqual(['ios', 'ipados', 'macos', 'tvos']);
+  });
+
+  it('only lets a paraphrase hedge where its source hedges (verify item 6)', () => {
+    expect(RULES.find((r) => r.id === 'toolbar.large-title')!.check).toMatch(/^Use a large title/);
+    expect(hedgeProblem('Consider a large title.', 'Use a large title to help people stay oriented.')).toMatch(/direct recommendation/);
+    expect(hedgeProblem('Consider a large title.', 'Consider using a large title.')).toBeNull();
+    expect(hedgeProblem('Use a large title.', 'Use a large title.')).toBeNull();
+    const base = { id: 'x', title: 'x', components: ['button'], severity: 'low' as const, platforms: 'all' as const, source: { slug: 'w', phrase: 'Prefer round corners' } };
+    expect(checkRule({ ...base, check: 'Ideally, corners are round.' }, page).ok).toBe(true); // source says "Prefer"
+    const direct = { ...base, source: { slug: 'w', phrase: 'Widgets are small' } };
+    expect(checkRule({ ...direct, check: 'Consider keeping widgets small.' }, page).problem).toMatch(/hedges/);
+  });
+
+  it('registry verification rejects stale copies and fetches each page once (verify item 5)', async () => {
+    const fake = (stale: boolean) => vi.fn(async () => ({ doc: page, fetchedAt: Date.UTC(2026, 0, 2), stale }));
+    const rules = [
+      { id: 'a', title: 'a', components: ['button'], severity: 'low' as const, platforms: ['watchos'] as ApplePlatform[], check: 'Prefer round corners.', source: { slug: 'w', phrase: 'Prefer round corners' } },
+      { id: 'b', title: 'b', components: ['button'], severity: 'low' as const, platforms: ['watchos'] as ApplePlatform[], check: 'Avoid many widgets.', source: { slug: 'w', phrase: 'Avoid more than two widgets' } },
+    ];
+    const live = fake(false);
+    const ok = await verifyRegistry(rules, live);
+    expect(ok.failures).toEqual([]);
+    expect(live).toHaveBeenCalledTimes(1);
+    const old = await verifyRegistry(rules, fake(true));
+    expect(old.stalePages).toEqual(['w']);
+    expect(old.failures).toHaveLength(2);
+    expect(old.failures[0]).toMatch(/stale cached copy \(fetched 2026-01-02/);
+    const down = vi.fn(async () => {
+      throw new Error('offline');
+    });
+    expect((await verifyRegistry(rules, down)).failures[0]).toMatch(/fetch failed: offline/);
+    expect(down).toHaveBeenCalledTimes(1);
+  });
+
+  it('registry verification fails on HIGClient\'s expired-cache fallback (verify item 5)', async () => {
+    let ok = true;
+    const fetchImpl = vi.fn(async () => {
+      if (!ok) throw new TypeError('network down');
+      return new Response(JSON.stringify(page), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    const client = new HIGClient({ userAgent: 't', ttlMs: 1, cacheDir: null, retries: 0, fetchImpl: fetchImpl as unknown as typeof fetch, rateLimiter: new RateLimiter(1000, 4, 0) });
+    const rules = [{ id: 'a', title: 'a', components: ['button'], severity: 'low' as const, platforms: ['watchos'] as ApplePlatform[], check: 'Prefer round corners.', source: { slug: 'w', phrase: 'Prefer round corners' } }];
+    expect((await verifyRegistry(rules, (s) => client.getDocInfo(s))).failures).toEqual([]);
+    await new Promise((r) => setTimeout(r, 5));
+    ok = false;
+    const res = await verifyRegistry(rules, (s) => client.getDocInfo(s));
+    expect(res.stalePages).toEqual(['w']);
+    expect(res.failures[0]).toMatch(/stale cached copy/);
   });
 
   it('detects platform-scoped headings and mis-scoped rules', () => {

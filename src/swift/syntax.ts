@@ -202,56 +202,126 @@ export function enclosingCallNames(m: string, offset: number, levels = 4): strin
   return out;
 }
 
+/** One way a ViewBuilder body can render: how many matches show at once, and whether one is a Cancel button. */
+export interface BranchConfig {
+  count: number;
+  cancel: boolean;
+}
+
+/** ViewBuilder containers whose closure content renders in place (descended into when counting). */
+const CONTAINERS = /^(Group|Section|VStack|HStack|ZStack|LazyVStack|LazyHStack|ControlGroup)\b/;
+const MAX_CONFIGS = 256;
+
+function dedupe(cs: BranchConfig[]): BranchConfig[] {
+  const seen = new Map<string, BranchConfig>();
+  for (const c of cs) seen.set(`${c.count}:${c.cancel}`, c);
+  return [...seen.values()];
+}
+
+function product(a: BranchConfig[], b: BranchConfig[]): BranchConfig[] {
+  return dedupe(a.flatMap((x) => b.map((y) => ({ count: x.count + y.count, cancel: x.cancel || y.cancel }))));
+}
+
+/** Index of the `{` that opens a branch body after `from`, skipping (…) and […] in the condition. */
+export function findBranchBrace(text: string, from: number): number {
+  for (let j = from; j < text.length; j++) {
+    const c = text[j];
+    if (c === '(' || c === '[') {
+      const close = matchForward(text, j);
+      if (close < 0) return -1;
+      j = close;
+      continue;
+    }
+    if (c === '{') return j;
+    if (c === '}') return -1;
+  }
+  return -1;
+}
+
 /**
- * Count `pattern` matches in a ViewBuilder body, treating if/else branches as mutually exclusive
- * (the count is the largest branch, not the sum). Returns null when the count can't be known
- * statically: ForEach, switch, or an unparsable if.
+ * Every combination of `pattern` matches a ViewBuilder body can show at once. if/else branches are
+ * alternatives, recognized containers (Group, Section, stacks) are descended into, and conditions
+ * may contain closures. Returns null when the shapes can't be known statically (ForEach, switch,
+ * an unparsable if, or too many combinations).
  */
-export function countBranchAware(text: string, pattern: RegExp): number | null {
+export function branchConfigs(text: string, pattern: RegExp): BranchConfig[] | null {
   if (/\b(ForEach|switch)\b/.test(text)) return null;
   const re = new RegExp(pattern.source, 'g');
-  let total = 0;
+  const plain = (a: number, b: number): BranchConfig[] => {
+    const piece = text.slice(a, b);
+    return [{ count: (piece.match(re) ?? []).length, cancel: /role\s*:\s*\.cancel\b/.test(piece) }];
+  };
+  let configs: BranchConfig[] = [{ count: 0, cancel: false }];
+  const seq = (cs: BranchConfig[]) => {
+    configs = product(configs, cs);
+    return configs.length <= MAX_CONFIGS;
+  };
   let plainFrom = 0;
   let depth = 0;
-  const countPlain = (a: number, b: number) => (text.slice(a, b).match(re) ?? []).length;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
-    if (c === '(' || c === '{' || c === '[') depth++;
-    else if (c === ')' || c === '}' || c === ']') depth--;
-    if (depth !== 0 || !/^if\b/.test(text.slice(i, i + 3)) || (i > 0 && /[\w#.]/.test(text[i - 1]))) continue;
-    // An if/else-if/else chain at the top level of this body.
-    total += countPlain(plainFrom, i);
-    const branches: number[] = [];
-    let j = i;
-    for (;;) {
-      const open = text.indexOf('{', j);
+    const boundary = i === 0 || !/[\w#.]/.test(text[i - 1]);
+    if (depth === 0 && boundary && /^if\b/.test(text.slice(i, i + 3))) {
+      const alternatives: BranchConfig[] = [];
+      let j = i + 2;
+      let hasElse = false;
+      for (;;) {
+        const open = findBranchBrace(text, j);
+        const close = open >= 0 ? matchForward(text, open) : -1;
+        if (close < 0) return null;
+        const inner = branchConfigs(text.slice(open + 1, close), pattern);
+        if (!inner) return null;
+        alternatives.push(...inner);
+        j = close + 1;
+        const k = skipSpace(text, j);
+        if (!/^else\b/.test(text.slice(k, k + 5))) break;
+        const k2 = skipSpace(text, k + 4);
+        if (/^if\b/.test(text.slice(k2, k2 + 3))) {
+          j = k2 + 2;
+          continue;
+        }
+        if (text[k2] !== '{') return null;
+        const c2 = matchForward(text, k2);
+        if (c2 < 0) return null;
+        const inner2 = branchConfigs(text.slice(k2 + 1, c2), pattern);
+        if (!inner2) return null;
+        alternatives.push(...inner2);
+        hasElse = true;
+        j = c2 + 1;
+        break;
+      }
+      if (!hasElse) alternatives.push({ count: 0, cancel: false });
+      if (!seq(plain(plainFrom, i)) || !seq(dedupe(alternatives))) return null;
+      plainFrom = j;
+      i = j - 1;
+      continue;
+    }
+    const container = depth === 0 && boundary ? CONTAINERS.exec(text.slice(i, i + 20)) : null;
+    if (container) {
+      const open = findBranchBrace(text, i + container[0].length);
+      const between = open >= 0 ? text.slice(i + container[0].length, open) : '';
+      // Only `Name {` or `Name(args) {`: blank out (…) groups and require nothing else in between.
       const close = open >= 0 ? matchForward(text, open) : -1;
-      if (close < 0) return null;
-      const inner = countBranchAware(text.slice(open + 1, close), pattern);
-      if (inner === null) return null;
-      branches.push(inner);
-      j = close + 1;
-      const k = skipSpace(text, j);
-      if (!/^else\b/.test(text.slice(k, k + 5))) break;
-      const k2 = skipSpace(text, k + 4);
-      if (/^if\b/.test(text.slice(k2, k2 + 3))) {
-        j = k2;
+      if (close > 0 && /^\s*(\([\s\S]*\))?\s*$/.test(between)) {
+        const inner = branchConfigs(text.slice(open + 1, close), pattern);
+        if (!inner) return null;
+        if (!seq(plain(plainFrom, i)) || !seq(inner)) return null;
+        plainFrom = close + 1;
+        i = close;
         continue;
       }
-      if (text[k2] !== '{') return null;
-      const c2 = matchForward(text, k2);
-      if (c2 < 0) return null;
-      const inner2 = countBranchAware(text.slice(k2 + 1, c2), pattern);
-      if (inner2 === null) return null;
-      branches.push(inner2);
-      j = c2 + 1;
-      break;
     }
-    total += Math.max(...branches);
-    plainFrom = j;
-    i = j - 1;
+    if (c === '(' || c === '{' || c === '[') depth++;
+    else if (c === ')' || c === '}' || c === ']') depth--;
   }
-  return total + countPlain(plainFrom, text.length);
+  if (!seq(plain(plainFrom, text.length))) return null;
+  return configs;
+}
+
+/** Largest number of `pattern` matches shown at once, or null when unknown. */
+export function countBranchAware(text: string, pattern: RegExp): number | null {
+  const configs = branchConfigs(text, pattern);
+  return configs ? Math.max(...configs.map((c) => c.count)) : null;
 }
 
 export interface Bounds {

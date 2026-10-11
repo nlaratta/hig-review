@@ -22111,7 +22111,7 @@ var RULES = [
     components: ["typography", "accessibility"],
     platforms: ["ios", "ipados", "tvos", "visionos", "watchos"],
     severity: "high",
-    check: "Consider built-in text styles: with system fonts they bring Dynamic Type support. Text set at fixed point sizes does not follow the setting.",
+    check: "Built-in text styles used with the system fonts support Dynamic Type; text set at fixed point sizes does not follow the setting.",
     source: { slug: "typography", phrase: "also ensures support for Dynamic Type" }
   },
   {
@@ -22551,7 +22551,7 @@ var RULES = [
     components: ["toolbar"],
     platforms: ["ios"],
     severity: "low",
-    check: "Consider a large title to help people stay oriented as they navigate and scroll.",
+    check: "Use a large title to help people stay oriented as they navigate and scroll.",
     source: { slug: "toolbars", phrase: "Use a large title" }
   },
   // ---------------------------------------------------------------- Alerts and action sheets
@@ -23552,50 +23552,105 @@ function enclosingCallNames(m, offset, levels = 4) {
   }
   return out;
 }
-function countBranchAware(text, pattern) {
+var CONTAINERS = /^(Group|Section|VStack|HStack|ZStack|LazyVStack|LazyHStack|ControlGroup)\b/;
+var MAX_CONFIGS = 256;
+function dedupe(cs) {
+  const seen = /* @__PURE__ */ new Map();
+  for (const c of cs) seen.set(`${c.count}:${c.cancel}`, c);
+  return [...seen.values()];
+}
+function product(a, b) {
+  return dedupe(a.flatMap((x) => b.map((y) => ({ count: x.count + y.count, cancel: x.cancel || y.cancel }))));
+}
+function findBranchBrace(text, from) {
+  for (let j = from; j < text.length; j++) {
+    const c = text[j];
+    if (c === "(" || c === "[") {
+      const close = matchForward(text, j);
+      if (close < 0) return -1;
+      j = close;
+      continue;
+    }
+    if (c === "{") return j;
+    if (c === "}") return -1;
+  }
+  return -1;
+}
+function branchConfigs(text, pattern) {
   if (/\b(ForEach|switch)\b/.test(text)) return null;
   const re = new RegExp(pattern.source, "g");
-  let total = 0;
+  const plain = (a, b) => {
+    const piece = text.slice(a, b);
+    return [{ count: (piece.match(re) ?? []).length, cancel: /role\s*:\s*\.cancel\b/.test(piece) }];
+  };
+  let configs = [{ count: 0, cancel: false }];
+  const seq = (cs) => {
+    configs = product(configs, cs);
+    return configs.length <= MAX_CONFIGS;
+  };
   let plainFrom = 0;
   let depth = 0;
-  const countPlain = (a, b) => (text.slice(a, b).match(re) ?? []).length;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
-    if (c === "(" || c === "{" || c === "[") depth++;
-    else if (c === ")" || c === "}" || c === "]") depth--;
-    if (depth !== 0 || !/^if\b/.test(text.slice(i, i + 3)) || i > 0 && /[\w#.]/.test(text[i - 1])) continue;
-    total += countPlain(plainFrom, i);
-    const branches = [];
-    let j = i;
-    for (; ; ) {
-      const open = text.indexOf("{", j);
+    const boundary = i === 0 || !/[\w#.]/.test(text[i - 1]);
+    if (depth === 0 && boundary && /^if\b/.test(text.slice(i, i + 3))) {
+      const alternatives = [];
+      let j = i + 2;
+      let hasElse = false;
+      for (; ; ) {
+        const open = findBranchBrace(text, j);
+        const close = open >= 0 ? matchForward(text, open) : -1;
+        if (close < 0) return null;
+        const inner = branchConfigs(text.slice(open + 1, close), pattern);
+        if (!inner) return null;
+        alternatives.push(...inner);
+        j = close + 1;
+        const k = skipSpace(text, j);
+        if (!/^else\b/.test(text.slice(k, k + 5))) break;
+        const k2 = skipSpace(text, k + 4);
+        if (/^if\b/.test(text.slice(k2, k2 + 3))) {
+          j = k2 + 2;
+          continue;
+        }
+        if (text[k2] !== "{") return null;
+        const c2 = matchForward(text, k2);
+        if (c2 < 0) return null;
+        const inner2 = branchConfigs(text.slice(k2 + 1, c2), pattern);
+        if (!inner2) return null;
+        alternatives.push(...inner2);
+        hasElse = true;
+        j = c2 + 1;
+        break;
+      }
+      if (!hasElse) alternatives.push({ count: 0, cancel: false });
+      if (!seq(plain(plainFrom, i)) || !seq(dedupe(alternatives))) return null;
+      plainFrom = j;
+      i = j - 1;
+      continue;
+    }
+    const container = depth === 0 && boundary ? CONTAINERS.exec(text.slice(i, i + 20)) : null;
+    if (container) {
+      const open = findBranchBrace(text, i + container[0].length);
+      const between = open >= 0 ? text.slice(i + container[0].length, open) : "";
       const close = open >= 0 ? matchForward(text, open) : -1;
-      if (close < 0) return null;
-      const inner = countBranchAware(text.slice(open + 1, close), pattern);
-      if (inner === null) return null;
-      branches.push(inner);
-      j = close + 1;
-      const k = skipSpace(text, j);
-      if (!/^else\b/.test(text.slice(k, k + 5))) break;
-      const k2 = skipSpace(text, k + 4);
-      if (/^if\b/.test(text.slice(k2, k2 + 3))) {
-        j = k2;
+      if (close > 0 && /^\s*(\([\s\S]*\))?\s*$/.test(between)) {
+        const inner = branchConfigs(text.slice(open + 1, close), pattern);
+        if (!inner) return null;
+        if (!seq(plain(plainFrom, i)) || !seq(inner)) return null;
+        plainFrom = close + 1;
+        i = close;
         continue;
       }
-      if (text[k2] !== "{") return null;
-      const c2 = matchForward(text, k2);
-      if (c2 < 0) return null;
-      const inner2 = countBranchAware(text.slice(k2 + 1, c2), pattern);
-      if (inner2 === null) return null;
-      branches.push(inner2);
-      j = c2 + 1;
-      break;
     }
-    total += Math.max(...branches);
-    plainFrom = j;
-    i = j - 1;
+    if (c === "(" || c === "{" || c === "[") depth++;
+    else if (c === ")" || c === "}" || c === "]") depth--;
   }
-  return total + countPlain(plainFrom, text.length);
+  if (!seq(plain(plainFrom, text.length))) return null;
+  return configs;
+}
+function countBranchAware(text, pattern) {
+  const configs = branchConfigs(text, pattern);
+  return configs ? Math.max(...configs.map((c) => c.count)) : null;
 }
 function boundsFromChain(m, mods) {
   let idx = -1;
@@ -23663,7 +23718,7 @@ var HEURISTICS = [
   {
     id: "hit-target-size",
     ruleIds: ["controls.size.<platform>"],
-    description: "Button, Link, Toggle, Menu or onTapGesture view whose bounds are readable: a literal .frame on the control, or on the label's single root view plus literal padding. Below the platform minimum is high, below the default is medium; non-literal padding makes it a low-severity advisory. Frames on nested views are not used.",
+    description: "Button, Link, button-style Toggle, Menu or onTapGesture view whose bounds are readable: a literal .frame on the control, or on the label's single root view (label: argument, label: trailing closure, Button(action:) { }, Link(destination:) { }, Toggle(isOn:) { }) plus literal padding. Below the platform minimum is high, below the default is medium; non-literal padding makes it a low-severity advisory. Frames on nested views are not used.",
     falsePositives: "Hit area enlarged by a custom ButtonStyle or a parent view; decorative images are never checked."
   },
   {
@@ -23711,13 +23766,13 @@ var HEURISTICS = [
   {
     id: "alert-button-count",
     ruleIds: ["alert.max-buttons", "actionsheet.max-buttons.watchos"],
-    description: ".alert actions with more than three Buttons shown at once (if/else branches count as alternatives; ForEach/switch skip the check); on watchOS, .confirmationDialog with more than four including Cancel.",
+    description: ".alert actions with more than three Buttons shown at once (if/else branches are alternatives, Group/Section/stacks are descended into, ForEach/switch skip the check); on watchOS, .confirmationDialog with more than four including the Cancel the system adds to any alternative without one.",
     falsePositives: "Conditions that are never true together across separate if statements."
   },
   {
     id: "segmented-count",
     ruleIds: ["segmented.count"],
-    description: "Picker with .segmented style and more literal .tag() options than the HIG suggests (5 on iPhone, 7 in wide layouts); if/else branches count as alternatives, ForEach/switch skip the check.",
+    description: "Picker with .segmented style and more literal .tag() options than the HIG suggests (5 on iPhone, 7 in wide layouts); if/else branches are alternatives, Group/Section/stacks are descended into, ForEach/switch skip the check.",
     falsePositives: 'iPad-only or Mac layouts reviewed with platform "ios"; pass the right platform.'
   },
   {
@@ -23778,6 +23833,7 @@ function checkHitTargets(ctx) {
     });
   };
   for (const { call, chain } of callsNamed(ctx.m, TAPPABLE)) {
+    if (call.name === "Toggle" && !chain.some((x) => x.name === "toggleStyle" && /\.button\b|ButtonToggleStyle/.test(slice(ctx.m, x.args)))) continue;
     const own = boundsFromChain(ctx.m, chain.filter((x) => x.name === "frame"));
     if (own) {
       const lastFrame = [...chain].reverse().find((x) => x.name === "frame");
@@ -23785,9 +23841,9 @@ function checkHitTargets(ctx) {
       continue;
     }
     if (chain.some((x) => x.name === "frame")) continue;
-    const label = call.closures.find((c) => c.label === "label") ?? (call.closures.length >= 2 ? call.closures[1] : call.closures.length === 1 && /\baction\s*:/.test(slice(ctx.m, call.args)) ? call.closures[0] : void 0);
+    const label = labelRange(ctx.m, call);
     if (!label) continue;
-    const root = rootExpression(ctx.m, label.body);
+    const root = rootExpression(ctx.m, label);
     const bounds = root ? boundsFromChain(ctx.m, root.mods) : null;
     if (bounds) {
       judge(bounds, call.start, call.end, `${call.name} label (${root.head})`);
@@ -23800,6 +23856,28 @@ function checkHitTargets(ctx) {
     const bounds = boundsFromChain(ctx.m, before);
     if (!bounds) continue;
     judge(bounds, head.start, x.index + 13, `Tappable ${head.name}`);
+  }
+}
+function labelRange(m, call) {
+  const args = slice(m, call.args);
+  const arg = /\blabel\s*:\s*\{/.exec(args);
+  if (arg) {
+    const open = call.args[0] + arg.index + arg[0].length - 1;
+    const close = matchForward(m, open);
+    return close > 0 ? [open + 1, close] : null;
+  }
+  const labeled = call.closures.find((c) => c.label === "label");
+  if (labeled) return labeled.body;
+  if (/^\s*("|LocalizedStringKey\b|String\b|verbatim\s*:)/.test(args)) return null;
+  const unlabeled = call.closures.filter((c) => c.label === null);
+  switch (call.name) {
+    case "Button":
+      return /\baction\s*:/.test(args) && unlabeled.length === 1 ? unlabeled[0].body : null;
+    case "Link":
+    case "Toggle":
+      return unlabeled.length === 1 ? unlabeled[0].body : null;
+    default:
+      return null;
   }
 }
 function chainHeadEnd(m, head) {
@@ -24035,8 +24113,9 @@ function checkScreenBounds(ctx) {
     }
   }
 }
+var BUTTON = /(?<![.\w])Button\s*[({]/;
 function countButtons(text) {
-  return countBranchAware(text, /(?<![.\w])Button\s*[({]/);
+  return countBranchAware(text, BUTTON);
 }
 var hasBranches = (text) => /(?<![\w#.])if\b/.test(text);
 function checkAlerts(ctx) {
@@ -24048,7 +24127,7 @@ function checkAlerts(ctx) {
       const inArgs = /\bactions\s*:\s*\{/.exec(slice(ctx.m, call.args));
       if (!inArgs) continue;
       const open = call.args[0] + inArgs.index + inArgs[0].length - 1;
-      text = ctx.m.slice(open, matchForward(ctx.m, open) + 1);
+      text = ctx.m.slice(open + 1, matchForward(ctx.m, open));
     }
     if (/(?<![.\w])Alert\s*\(/.test(text)) continue;
     const n = countButtons(text);
@@ -24069,9 +24148,9 @@ function checkAlerts(ctx) {
     const actions = call.closures.find((c) => c.label === null || c.label === "actions");
     if (!actions) continue;
     const text = slice(ctx.m, actions.body);
-    const n = countButtons(text);
-    if (n === null) continue;
-    const total = n + (/role\s*:\s*\.cancel\b/.test(text) ? 0 : 1);
+    const configs = branchConfigs(text, BUTTON);
+    if (!configs) continue;
+    const total = Math.max(...configs.map((c) => c.count + (c.cancel ? 0 : 1)));
     if (total <= 4) continue;
     add(ctx, {
       check: "alert-button-count",
@@ -24106,6 +24185,10 @@ function checkSegmented(ctx) {
     });
   }
 }
+function findingApplies(f, platform) {
+  const rule = ruleById(f.ruleId);
+  return !!rule && appliesTo(rule, platform);
+}
 function runHeuristics(src, platform) {
   const ctx = { src, m: maskInactivePlatforms(src.masked, platform), platform, out: [] };
   checkHitTargets(ctx);
@@ -24117,7 +24200,7 @@ function runHeuristics(src, platform) {
   checkScreenBounds(ctx);
   checkAlerts(ctx);
   checkSegmented(ctx);
-  return ctx.out.sort((a, b) => a.lines[0] - b.lines[0] || a.check.localeCompare(b.check));
+  return ctx.out.filter((f) => findingApplies(f, platform)).sort((a, b) => a.lines[0] - b.lines[0] || a.check.localeCompare(b.check));
 }
 
 // src/swift/review.ts
@@ -24154,7 +24237,7 @@ async function loadSwift(params, cwd = process.cwd()) {
 }
 async function reviewSwiftUI(input, platform, citer) {
   const src = toSource(input.code);
-  const raw = runHeuristics(src, platform);
+  const raw = runHeuristics(src, platform).filter((f) => findingApplies(f, platform));
   const findings = [];
   for (const f of raw) {
     const rule = ruleById(f.ruleId);

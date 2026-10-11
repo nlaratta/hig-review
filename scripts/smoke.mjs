@@ -25,7 +25,7 @@ const cacheDir = process.env.HIG_CACHE_DIR ?? fs.mkdtempSync(path.join(os.tmpdir
 
 const { HIGClient } = await import(path.join(root, 'dist/hig/client.js'));
 const { RULES, COMPONENTS } = await import(path.join(root, 'dist/rules/registry.js'));
-const { checkRule } = await import(path.join(root, 'dist/rules/verify.js'));
+const { verifyRegistry } = await import(path.join(root, 'dist/rules/verify.js'));
 const { USER_AGENT } = await import(path.join(root, 'dist/utils/config.js'));
 
 let serverPath = path.join(root, 'dist', 'index.js');
@@ -200,27 +200,21 @@ try {
   await client.close().catch(() => {});
 }
 
-// Phrase re-verification: every registry phrase must match exactly one sentence on its live page;
-// the rule's platforms must be covered by the page's supported-platforms and any platform heading;
-// and the rule's numbers must appear in the cited text (right column for tables).
+// Phrase re-verification (verifyRegistry): every registry phrase must match exactly one sentence
+// on a page fetched fresh from Apple (a stale fallback copy fails); the rule's platforms must be
+// covered by the page's supported-platforms and any platform heading; its numbers must appear in
+// the cited text; and it may only hedge where the source does.
 console.log('\n=== Registry phrase re-verification (live) ===');
+// A fresh client with a short TTL; pages it serves from a stale fallback copy fail their rules.
 const hig = new HIGClient({ userAgent: USER_AGENT, ttlMs: 60 * 60 * 1000, cacheDir });
-const stale = [];
-for (const rule of RULES) {
-  let result;
-  try {
-    result = checkRule(rule, await hig.getDoc(rule.source.slug));
-  } catch (err) {
-    result = { id: rule.id, ok: false, problem: `fetch failed: ${err.message}` };
-  }
-  if (!result.ok) stale.push(`${rule.id} (${rule.source.slug}: "${rule.source.phrase}"): ${result.problem}`);
-}
-const slugs = new Set(RULES.map((r) => r.source.slug));
-if (stale.length) {
+const verification = await verifyRegistry(RULES, (slug) => hig.getDocInfo(slug));
+if (verification.failures.length) {
   failures++;
-  console.log(`FAIL ${stale.length} stale or mis-scoped rule(s):\n  ${stale.join('\n  ')}`);
+  console.log(`FAIL ${verification.failures.length} stale, unverifiable or mis-scoped rule(s):\n  ${verification.failures.join('\n  ')}`);
 } else {
-  console.log(`PASS all ${RULES.length} rule phrases matched exactly once on ${slugs.size} live pages; page and heading platform scopes and numeric data consistent`);
+  console.log(
+    `PASS all ${RULES.length} rule phrases matched exactly once on ${verification.pages} live pages (none stale); page and heading platform scopes, numeric data and hedging consistent`
+  );
 }
 
 if (!process.env.HIG_CACHE_DIR) fs.rmSync(cacheDir, { recursive: true, force: true });

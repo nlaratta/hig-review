@@ -3,11 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { evalOsCondition, maskSwift, toSource, lineAt } from '../src/swift/lexer.js';
-import { HEURISTICS, runHeuristics } from '../src/swift/heuristics.js';
-import { countBranchAware, headOf } from '../src/swift/syntax.js';
+import { HEURISTICS, labelRange, runHeuristics } from '../src/swift/heuristics.js';
+import { branchConfigs, countBranchAware, findBranchBrace, headOf, parseCall } from '../src/swift/syntax.js';
 import { loadSwift, reviewSwiftUI } from '../src/swift/review.js';
 import { Citer } from '../src/rules/citation.js';
-import { ruleById } from '../src/rules/registry.js';
+import { appliesTo, ruleById } from '../src/rules/registry.js';
+import { PLATFORMS } from '../src/types/index.js';
 import { FIXTURES } from './fixtures/swiftui.js';
 import { syntheticPage } from './fixtures/pages.js';
 
@@ -158,6 +159,64 @@ describe('SwiftUI heuristics: positive and negative fixtures', () => {
     expect(m).toContain('.font(.system(size: 9))');
     expect(checks(code)).toContain('font-below-minimum');
     expect(maskSwift('let t = "\\(a // ) "\n)" ; Text("x")')).toContain('Text("x")');
+  });
+
+  it('only returns findings whose rule applies to the requested platform (verify item 1)', () => {
+    const all = Object.values(FIXTURES).flatMap((f) => [...f.flag, ...f.clean]);
+    for (const platform of PLATFORMS) {
+      for (const code of all) {
+        for (const f of runHeuristics(toSource(code), platform)) {
+          expect(appliesTo(ruleById(f.ruleId)!, platform), `${f.ruleId} on ${platform}`).toBe(true);
+        }
+      }
+    }
+    const black = 'Text("T").foregroundColor(.black)';
+    expect(checks(black, 'ios')).toContain('hard-coded-color');
+    expect(checks(black, 'visionos')).toEqual([]); // Dark Mode rules don't cover visionOS
+    expect(checks(black, 'watchos')).toEqual([]);
+  });
+
+  it('counts the implicit watchOS Cancel per branch (verify item 4)', () => {
+    const dialog = (other: string) => `.confirmationDialog("Pick", isPresented: $p) {
+  if simple {
+    Button("A") {}; Button("B") {}; Button("C") {}; Button("Cancel", role: .cancel) {}
+  } else {
+    ${other}
+  }
+}`;
+    // The else branch has 4 ordinary buttons, so the system adds a fifth (Cancel).
+    expect(checks(dialog('Button("W") {}; Button("X") {}; Button("Y") {}; Button("Z") {}'), 'watchos')).toContain('alert-button-count');
+    expect(checks(dialog('Button("W") {}; Button("X") {}; Button("Cancel", role: .cancel) {}'), 'watchos')).not.toContain('alert-button-count');
+    expect(branchConfigs('if a { Button("x"){} Button("c", role: .cancel){} } else { Button("y"){} }', /Button\s*[({]/)).toEqual([
+      { count: 2, cancel: true },
+      { count: 1, cancel: false },
+    ]);
+  });
+
+  it('descends into containers and skips closures in if conditions when counting (verify item 3)', () => {
+    const re = /Button\s*[({]/;
+    expect(countBranchAware('Group { if a { Button("1"){}; Button("2"){} } else { Button("3"){}; Button("4"){} } }', re)).toBe(2);
+    expect(countBranchAware('if xs.contains(where: { $0 > 1 }) { Button("1"){}; Button("2"){} } else { Button("3"){}; Button("4"){} }', re)).toBe(2);
+    expect(countBranchAware('VStack(spacing: 4) { Button("1"){}; if a { Button("2"){} } }', re)).toBe(2);
+    const cond = 'if xs.contains(where: { $0 > 1 }) { body }';
+    expect(findBranchBrace(cond, 2)).toBe(cond.indexOf('{ body'));
+  });
+
+  it('finds label closures for every initializer form (verify item 2)', () => {
+    const label = (code: string) => {
+      const m = maskSwift(code);
+      const name = /^\w+/.exec(code)![0];
+      const call = parseCall(m, name, 0, name.length);
+      const r = labelRange(m, call);
+      return r ? m.slice(r[0], r[1]).trim() : null;
+    };
+    expect(label('Button(action: go, label: { Image(systemName: "x") })')).toBe('Image(systemName: "x")');
+    expect(label('Button(action: go) { Image("i") }')).toBe('Image("x")');
+    expect(label('Button { go() } label: { Image("i") }')).toBe('Image("x")');
+    expect(label('Link(destination: url) { Image("i") }')).toBe('Image("x")');
+    expect(label('Toggle(isOn: $on) { Image("i") }')).toBe('Image("x")');
+    expect(label('Button("Go") { go() }')).toBeNull();
+    expect(label('Link("Docs", destination: url)')).toBeNull();
   });
 
   it('reports correct line numbers and snippets', () => {

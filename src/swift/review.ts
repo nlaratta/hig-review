@@ -9,7 +9,7 @@ import { HIGServerError } from '../types/index.js';
 import { ruleById, type Severity } from '../rules/registry.js';
 import type { Citation, Citer } from '../rules/citation.js';
 import { toSource } from './lexer.js';
-import { runHeuristics, type Confidence } from './heuristics.js';
+import { findingApplies, runHeuristics, type Confidence } from './heuristics.js';
 
 export const MAX_SOURCE_BYTES = 200 * 1024;
 
@@ -76,7 +76,8 @@ export async function reviewSwiftUI(
   citer: Citer
 ): Promise<Review> {
   const src = toSource(input.code);
-  const raw = runHeuristics(src, platform);
+  // runHeuristics already drops findings whose rule doesn't apply; filter again so nothing returned here can.
+  const raw = runHeuristics(src, platform).filter((f) => findingApplies(f, platform));
   const findings: Finding[] = [];
   for (const f of raw) {
     const rule = ruleById(f.ruleId)!;

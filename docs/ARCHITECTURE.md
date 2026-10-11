@@ -73,7 +73,8 @@ A page document contains:
   - The phrase matches exactly one sentence or table row.
   - The rule's platforms are covered by the page's `supported-platforms` and by any platform heading above the sentence ("watchOS", "iOS, iPadOS").
   - Every number in the rule's `data` appears in the cited text. For table rows such as control and text sizes, it must be in the right column.
-  - `npm run smoke` runs this for every rule against the live pages.
+  - A paraphrase hedges ("consider", "prefer", "ideally", …) only when the cited sentence does.
+  - `verifyRegistry` runs `checkRule` for every rule. It fetches each page once with `getDocInfo` and fails every rule whose page came from a stale fallback copy. `npm run smoke` uses it against the live pages.
 - `doc.ts`: renders `docs/RULES.md`. A unit test fails if the committed file differs.
 
 ### SwiftUI heuristics (`src/swift/`)
@@ -88,8 +89,8 @@ A page document contains:
   - walking back from a modifier to the head of its expression
   - the calls that enclose an offset (to tell a `.background { … }` argument from content, or to spot a `scaledFont(for:)` wrapper)
   - bounds from a chain: the last literal `.frame(width:height:)` plus literal padding after it. Non-literal padding leaves the bounds unresolved, and the finding becomes an advisory. For a label, only its single root view counts.
-  - `countBranchAware`: counts buttons or segments treating `if`/`else` branches as alternatives. `ForEach` and `switch` make the count unknown.
-- `heuristics.ts`: eleven checks. Each one maps to a registry rule and assigns a severity and a confidence. `HEURISTICS` documents what each check flags and its known false positives; that list feeds `docs/RULES.md`.
+  - `branchConfigs` / `countBranchAware`: list every combination of buttons or segments that can show at once. `if`/`else` branches are alternatives. Branch braces are found outside condition parentheses. Group, Section and stack bodies are descended into. Each combination records whether it has a Cancel button, so watchOS can add the implicit Cancel per alternative. `ForEach` and `switch` make the count unknown.
+- `heuristics.ts`: eleven checks. Each one maps to a registry rule and assigns a severity and a confidence. Findings whose rule doesn't apply to the requested platform are dropped centrally (`findingApplies`). `labelRange` finds a control's label closure in every initializer form. `HEURISTICS` documents what each check flags and its known false positives; that list feeds `docs/RULES.md`.
 - `review.ts`: input handling. It takes inline code or a `.swift` path, resolved against the server's working directory, with a 200 KB cap. It attaches citations and a summary, and adds a fixed note that heuristics can misfire.
 
 ## Server (`src/server.ts`)

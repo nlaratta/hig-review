@@ -172,7 +172,7 @@ export const RULES: Rule[] = [
     components: ['typography', 'accessibility'],
     platforms: ['ios', 'ipados', 'tvos', 'visionos', 'watchos'],
     severity: 'high',
-    check: "Consider built-in text styles: with system fonts they bring Dynamic Type support. Text set at fixed point sizes does not follow the setting.",
+    check: "Built-in text styles used with the system fonts support Dynamic Type; text set at fixed point sizes does not follow the setting.",
     source: { slug: 'typography', phrase: 'also ensures support for Dynamic Type' },
   },
   {
@@ -618,7 +618,7 @@ export const RULES: Rule[] = [
     components: ['toolbar'],
     platforms: ['ios'],
     severity: 'low',
-    check: "Consider a large title to help people stay oriented as they navigate and scroll.",
+    check: "Use a large title to help people stay oriented as they navigate and scroll.",
     source: { slug: 'toolbars', phrase: 'Use a large title' },
   },
 

@@ -22,6 +22,24 @@ export const FIXTURES: Record<string, HeuristicFixture> = {
       `Text("Tap")
   .frame(width: 32, height: 32)
   .onTapGesture { tapped() }`,
+      // Trailing closure on the next line (valid Swift).
+      `Button(action: go)
+{
+  Image(systemName: "plus")
+}
+.frame(width: 20, height: 20)`,
+      // contentShape does not enlarge a 20x20 target.
+      `Button { go() } label: {
+  Image(systemName: "plus")
+    .frame(width: 20, height: 20)
+    .contentShape(Rectangle())
+}`,
+      // padding(1) makes it 22x22, still below 28x28.
+      `Button { go() } label: {
+  Image(systemName: "plus")
+    .frame(width: 20, height: 20)
+    .padding(1)
+}`,
     ],
     clean: [
       // Decorative image, not tappable.
@@ -35,6 +53,13 @@ export const FIXTURES: Record<string, HeuristicFixture> = {
     .contentShape(Rectangle())
 }`,
       `Button("Wide") { go() }.frame(minWidth: 20, minHeight: 20)`,
+      // Nested frames don't establish the label's bounds (an HStack of two 24x44 views is wider).
+      `Button { go() } label: {
+  HStack(spacing: 8) {
+    Image(systemName: "a").frame(width: 24, height: 44)
+    Image(systemName: "b").frame(width: 24, height: 44)
+  }
+}`,
       // Commented-out code is ignored.
       `// Button("x") {}.frame(width: 10, height: 10)
 Text("hi")`,
@@ -55,6 +80,10 @@ Text("hi")`,
 var body: some View { Text("Scaled").font(.system(size: titleSize)) }`,
       `let note = "use .font(.system(size: 12)) sparingly"`,
       `label.font = UIFontMetrics.default.scaledFont(for: UIFont.systemFont(ofSize: 15))`,
+      // Wrapped across lines.
+      `label.font = UIFontMetrics.default.scaledFont(
+  for: UIFont.systemFont(ofSize: 15)
+)`,
     ],
   },
   'font-below-minimum': {
@@ -158,6 +187,15 @@ var body: some View { Text("Scaled").font(.system(size: titleSize)) }`,
   },
   'alert-button-count': {
     flag: [
+      // Two always-shown buttons plus a branch that adds two more.
+      `.alert("Sync", isPresented: $showing) {
+  Button("Retry") { retry() }
+  Button("Cancel", role: .cancel) {}
+  if canExport {
+    Button("Export") { export() }
+    Button("Share") { share() }
+  }
+}`,
       `.alert("Save changes?", isPresented: $showing) {
   Button("Save") { save() }
   Button("Save As…") { saveAs() }
@@ -174,6 +212,16 @@ var body: some View { Text("Scaled").font(.system(size: titleSize)) }`,
 }`,
       `.alert("Choose", isPresented: $showing) {
   ForEach(options) { option in Button(option.name) { pick(option) } }
+}`,
+      // Mutually exclusive branches: at most two buttons show at once.
+      `.alert("Changes", isPresented: $showing) {
+  if editing {
+    Button("Save") { save() }
+    Button("Discard", role: .destructive) { discard() }
+  } else {
+    Button("Edit") { edit() }
+    Button("Close", role: .cancel) {}
+  }
 }`,
     ],
   },
@@ -195,6 +243,15 @@ var body: some View { Text("Scaled").font(.system(size: titleSize)) }`,
   Text("3M").tag(3); Text("1Y").tag(4); Text("5Y").tag(5)
 }
 .pickerStyle(.menu)`,
+      // Exclusive branches with four segments each.
+      `Picker("Range", selection: $range) {
+  if intraday {
+    Text("1H").tag(0); Text("4H").tag(1); Text("1D").tag(2); Text("1W").tag(3)
+  } else {
+    Text("1M").tag(0); Text("3M").tag(1); Text("1Y").tag(2); Text("5Y").tag(3)
+  }
+}
+.pickerStyle(.segmented)`,
     ],
   },
   'light-font-weight': {

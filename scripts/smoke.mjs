@@ -149,9 +149,15 @@ try {
     assert.ok(!res.isError, text);
     const out = JSON.parse(text);
     assert.equal(out.ratio, 4.47);
-    assert.equal(out.hig.pass, false);
+    assert.equal(out.compliance, 'known');
+    assert.equal(out.hig.accessibilityTable.pass, false);
+    assert.equal(out.hig.darkModeMinimum.pass, false);
     assert.equal(out.wcag.aaLargeText, true);
-    assert.ok(out.citations.every((c) => c.citation.verified), 'contrast citations unverified');
+    assert.ok(out.citations.every((c) => c.citation.verified && c.citation.source === 'live'), 'contrast citations unverified');
+    const translucent = await call('check_contrast', { foreground: '#767676', background: '#00000000', fontSizePt: 17 }, 3);
+    const t = JSON.parse(translucent.text);
+    assert.equal(t.compliance, 'unknown');
+    assert.equal(t.hig.accessibilityTable.pass, null);
     const bad = await call('check_contrast', { foreground: 'blueish', background: '#fff' }, 2);
     assert.equal(bad.res.isError, true);
   });
@@ -194,8 +200,9 @@ try {
   await client.close().catch(() => {});
 }
 
-// Phrase re-verification: every registry phrase must still be on its live page, under a heading
-// that matches the rule's platforms.
+// Phrase re-verification: every registry phrase must match exactly one sentence on its live page;
+// the rule's platforms must be covered by the page's supported-platforms and any platform heading;
+// and the rule's numbers must appear in the cited text (right column for tables).
 console.log('\n=== Registry phrase re-verification (live) ===');
 const hig = new HIGClient({ userAgent: USER_AGENT, ttlMs: 60 * 60 * 1000, cacheDir });
 const stale = [];
@@ -213,7 +220,7 @@ if (stale.length) {
   failures++;
   console.log(`FAIL ${stale.length} stale or mis-scoped rule(s):\n  ${stale.join('\n  ')}`);
 } else {
-  console.log(`PASS all ${RULES.length} rule phrases found on ${slugs.size} live pages, platform scopes consistent`);
+  console.log(`PASS all ${RULES.length} rule phrases matched exactly once on ${slugs.size} live pages; page and heading platform scopes and numeric data consistent`);
 }
 
 if (!process.env.HIG_CACHE_DIR) fs.rmSync(cacheDir, { recursive: true, force: true });

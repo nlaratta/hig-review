@@ -1,13 +1,28 @@
 /**
- * SwiftUI heuristics: lexical checks over masked source. Each check maps to a registry rule whose
+ * SwiftUI heuristics: lexical checks over masked source (comments and strings blanked, and
+ * `#if os(...)` branches that don't apply to the target platform removed). Each check maps to a registry rule whose
  * source sentence was verified on the live HIG. These are hints for a reviewer, not proofs: they
  * do not type-check, resolve custom views or see runtime values.
  */
 
 import type { ApplePlatform } from '../types/index.js';
 import { ruleFor, type Severity } from '../rules/registry.js';
-import { SwiftSource, lineAt, linesText, matchForward } from './lexer.js';
-import { Call, Modifier, enclosingCallName, findAll, frameSize, headOf, modifierChain, parseCall, slice } from './syntax.js';
+import { SwiftSource, lineAt, linesText, maskInactivePlatforms, matchForward } from './lexer.js';
+import {
+  Bounds,
+  Call,
+  Modifier,
+  boundsFromChain,
+  countBranchAware,
+  enclosingCallName,
+  enclosingCallNames,
+  findAll,
+  headOf,
+  modifierChain,
+  parseCall,
+  rootExpression,
+  slice,
+} from './syntax.js';
 
 export type Confidence = 'high' | 'medium' | 'low';
 
@@ -33,8 +48,8 @@ export const HEURISTICS: HeuristicInfo[] = [
   {
     id: 'hit-target-size',
     ruleIds: ['controls.size.<platform>'],
-    description: 'Button, Link, Toggle, Menu or onTapGesture view with a literal .frame smaller than the platform\'s default (medium) or minimum (high) control size.',
-    falsePositives: 'Hit area enlarged elsewhere (contentShape on a padded parent, a custom ButtonStyle); frames on decorative images are ignored.',
+    description: 'Button, Link, Toggle, Menu or onTapGesture view whose bounds are readable: a literal .frame on the control, or on the label\'s single root view plus literal padding. Below the platform minimum is high, below the default is medium; non-literal padding makes it a low-severity advisory. Frames on nested views are not used.',
+    falsePositives: 'Hit area enlarged by a custom ButtonStyle or a parent view; decorative images are never checked.',
   },
   {
     id: 'fixed-font-size',
@@ -57,8 +72,8 @@ export const HEURISTICS: HeuristicInfo[] = [
   {
     id: 'icon-only-button-label',
     ruleIds: ['a11y.labels'],
-    description: 'Button whose label is only an Image, with no Text/Label and no .accessibilityLabel.',
-    falsePositives: 'Some SF Symbols provide a default VoiceOver description; labels set by a custom ButtonStyle or a wrapper view.',
+    description: 'Advisory (low severity): Button whose label is only an Image, with no Text/Label and no local .accessibilityLabel — a possible missing descriptive label to confirm with VoiceOver.',
+    falsePositives: 'SF Symbols provide default VoiceOver descriptions; labels set by a custom ButtonStyle or a wrapper view.',
   },
   {
     id: 'tap-gesture-as-button',
@@ -81,13 +96,13 @@ export const HEURISTICS: HeuristicInfo[] = [
   {
     id: 'alert-button-count',
     ruleIds: ['alert.max-buttons', 'actionsheet.max-buttons.watchos'],
-    description: '.alert actions with more than three Buttons; on watchOS, .confirmationDialog with more than four including Cancel.',
-    falsePositives: 'Buttons inside conditionals that never all show at once.',
+    description: '.alert actions with more than three Buttons shown at once (if/else branches count as alternatives; ForEach/switch skip the check); on watchOS, .confirmationDialog with more than four including Cancel.',
+    falsePositives: 'Conditions that are never true together across separate if statements.',
   },
   {
     id: 'segmented-count',
     ruleIds: ['segmented.count'],
-    description: 'Picker with .segmented style and more literal .tag() options than the HIG suggests (5 on iPhone, 7 in wide layouts).',
+    description: 'Picker with .segmented style and more literal .tag() options than the HIG suggests (5 on iPhone, 7 in wide layouts); if/else branches count as alternatives, ForEach/switch skip the check.',
     falsePositives: 'iPad-only or Mac layouts reviewed with platform "ios"; pass the right platform.',
   },
   {
@@ -133,57 +148,65 @@ function checkHitTargets(ctx: Ctx) {
   if (!rule?.data) return;
   const { defaultPt, minimumPt } = rule.data;
 
-  const judge = (w: number | undefined, h: number | undefined, from: number, to: number, what: string, confidence: Confidence) => {
-    const dims = [w, h].filter((v): v is number => v !== undefined);
+  const judge = (b: Bounds, from: number, to: number, what: string) => {
+    const dims = [b.width, b.height].filter((v): v is number => v !== undefined);
     if (!dims.length) return;
     const smallest = Math.min(...dims);
     if (smallest >= defaultPt) return;
-    const size = `${w ?? '?'}x${h ?? '?'} pt`;
+    const size = `${b.width ?? '?'}x${b.height ?? '?'} pt`;
+    if (!b.resolved) {
+      add(ctx, {
+        check: 'hit-target-size',
+        ruleId: rule.id,
+        severity: 'low',
+        confidence: 'low',
+        from,
+        to,
+        message: `Advisory: ${what} has a ${size} frame, but ${b.note ?? 'later modifiers change its size'}, so its hit area couldn't be determined. Confirm it reaches the ${defaultPt}x${defaultPt} pt default (${minimumPt}x${minimumPt} pt minimum) for ${ctx.platform}.`,
+      });
+      return;
+    }
     const below = smallest < minimumPt;
     add(ctx, {
       check: 'hit-target-size',
       ruleId: rule.id,
       severity: below ? 'high' : 'medium',
-      confidence,
+      confidence: 'medium',
       from,
       to,
-      message: `${what} has a ${size} frame, ${below ? `below the ${minimumPt}x${minimumPt} pt minimum` : `under the ${defaultPt}x${defaultPt} pt default`} control size for ${ctx.platform}. Enlarge the frame or the tappable area (padding plus .contentShape).`,
+      message: `${what} is ${size}, ${below ? `below the ${minimumPt}x${minimumPt} pt minimum` : `under the ${defaultPt}x${defaultPt} pt default`} control size for ${ctx.platform}. Enlarge the frame, or add padding inside the tappable area.`,
     });
   };
 
   for (const { call, chain } of callsNamed(ctx.m, TAPPABLE)) {
-    const frames = chain.filter((x) => x.name === 'frame');
-    const lastFrame = frames[frames.length - 1];
-    if (lastFrame) {
-      const size = frameSize(slice(ctx.m, lastFrame.args));
-      if (size.flexible) continue;
-      const after = chain.slice(chain.indexOf(lastFrame) + 1);
-      const padded = after.some((x) => x.name === 'padding');
-      judge(size.width, size.height, call.start, lastFrame.end, `${call.name}`, padded ? 'low' : 'medium');
+    // A frame on the control itself sets its bounds; padding outside the control is not tappable.
+    const own = boundsFromChain(ctx.m, chain.filter((x) => x.name === 'frame'));
+    if (own) {
+      const lastFrame = [...chain].reverse().find((x) => x.name === 'frame')!;
+      judge(own, call.start, lastFrame.end, call.name);
       continue;
     }
-    // No frame on the control itself: look at frames inside the label.
-    const labelText = [slice(ctx.m, call.args), ...call.closures.map((c) => slice(ctx.m, c.body))].join('\n');
-    if (/\.padding\b|\.contentShape\b|\b(min|max)(Width|Height)\s*:/.test(labelText)) continue;
-    const sizes = findAll(labelText, /\.frame\s*\(([^()]*)\)/).map((x) => frameSize(x[1]));
-    if (!sizes.length) continue;
-    const w = Math.max(...sizes.map((s) => s.width ?? 0));
-    const h = Math.max(...sizes.map((s) => s.height ?? 0));
-    judge(w || undefined, h || undefined, call.start, call.end, `${call.name} label`, 'low');
+    if (chain.some((x) => x.name === 'frame')) continue; // flexible frame on the control: can't tell
+    // Otherwise only the label's root view can establish bounds (its frame plus literal padding).
+    const label =
+      call.closures.find((c) => c.label === 'label') ??
+      (call.closures.length >= 2 ? call.closures[1] : call.closures.length === 1 && /\baction\s*:/.test(slice(ctx.m, call.args)) ? call.closures[0] : undefined);
+    if (!label) continue;
+    const root = rootExpression(ctx.m, label.body);
+    const bounds = root ? boundsFromChain(ctx.m, root.mods) : null;
+    if (bounds) {
+      judge(bounds, call.start, call.end, `${call.name} label (${root!.head})`);
+    }
+    // Frames on nested views don't establish the button's bounds (containers add spacing); no finding.
   }
 
   for (const x of findAll(ctx.m, /\.onTapGesture\b/)) {
     const head = headOf(ctx.m, x.index!);
     if (!head) continue;
     const before = modifierChain(ctx.m, chainHeadEnd(ctx.m, head)).filter((mod) => mod.start < x.index!);
-    const frames = before.filter((mod) => mod.name === 'frame');
-    const lastFrame = frames[frames.length - 1];
-    if (!lastFrame) continue;
-    const size = frameSize(slice(ctx.m, lastFrame.args));
-    if (size.flexible) continue;
-    const padded = before.slice(before.indexOf(lastFrame) + 1).some((mod) => mod.name === 'padding');
-    if (padded) continue;
-    judge(size.width, size.height, head.start, x.index! + 13, `Tappable ${head.name}`, 'medium');
+    const bounds = boundsFromChain(ctx.m, before);
+    if (!bounds) continue;
+    judge(bounds, head.start, x.index! + 13, `Tappable ${head.name}`);
   }
 }
 
@@ -257,6 +280,8 @@ function checkFonts(ctx: Ctx) {
     const line = ctx.m.slice(lineStart, lineEnd < 0 ? undefined : lineEnd);
     tooSmall(x[1].trim(), x.index!, x.index! + x[0].length);
     if (!dynamicTypeApplies || /UIFontMetrics|adjustsFontForContentSizeCategory/.test(line)) continue;
+    // Wrapped in UIFontMetrics…scaledFont(for: …), possibly across lines.
+    if (enclosingCallNames(ctx.m, x.index!).includes('scaledFont')) continue;
     add(ctx, {
       check: 'fixed-font-size',
       ruleId: 'type.dynamic-type',
@@ -349,11 +374,11 @@ function checkIconButtons(ctx: Ctx) {
     add(ctx, {
       check: 'icon-only-button-label',
       ruleId: 'a11y.labels',
-      severity: 'high',
-      confidence: 'medium',
+      severity: 'low',
+      confidence: 'low',
       from: call.start,
       to: call.end,
-      message: 'Icon-only Button without an accessibility label. Add .accessibilityLabel("…"), or use Label("…", systemImage:) with .labelStyle(.iconOnly) so VoiceOver reads a meaningful name.',
+      message: 'Possible missing descriptive label (advisory): this Button shows only an image and has no local .accessibilityLabel or text. SF Symbols carry default descriptions and a style or wrapper may add a label, so confirm with VoiceOver or Accessibility Inspector. If the name is missing or generic, add .accessibilityLabel("…") or use Label("…", systemImage:) with .labelStyle(.iconOnly).',
     });
   }
 }
@@ -440,10 +465,12 @@ function checkScreenBounds(ctx: Ctx) {
 
 // ------------------------------------------------------------------ alerts and dialogs
 
+/** Buttons shown at once: if/else branches count as alternatives; ForEach/switch make it unknown. */
 function countButtons(text: string): number | null {
-  if (/\bForEach\b/.test(text)) return null;
-  return findAll(text, /(?<![.\w])Button\s*[({]/).length;
+  return countBranchAware(text, /(?<![.\w])Button\s*[({]/);
 }
+
+const hasBranches = (text: string) => /(?<![\w#.])if\b/.test(text);
 
 function checkAlerts(ctx: Ctx) {
   for (const x of findAll(ctx.m, /\.alert\s*\(/)) {
@@ -463,7 +490,7 @@ function checkAlerts(ctx: Ctx) {
       check: 'alert-button-count',
       ruleId: 'alert.max-buttons',
       severity: 'medium',
-      confidence: 'high',
+      confidence: hasBranches(text) ? 'medium' : 'high',
       from: x.index!,
       to: call.end,
       message: `This alert has ${n} buttons; alerts hold up to three. Offer more choices in an action sheet (.confirmationDialog) or a dedicated view.`,
@@ -502,14 +529,13 @@ function checkSegmented(ctx: Ctx) {
     const content = call.closures.find((c) => c.label === null || c.label === 'content');
     if (!content) continue;
     const body = slice(ctx.m, content.body);
-    if (/\bForEach\b/.test(body)) continue;
-    const n = findAll(body, /\.tag\s*\(/).length;
-    if (n <= limit) continue;
+    const n = countBranchAware(body, /\.tag\s*\(/);
+    if (n === null || n <= limit) continue;
     add(ctx, {
       check: 'segmented-count',
       ruleId: 'segmented.count',
       severity: 'medium',
-      confidence: 'high',
+      confidence: hasBranches(body) ? 'medium' : 'high',
       from: call.start,
       to: style.end,
       message: `Segmented picker with ${n} segments; aim for at most ${limit} ${ctx.platform === 'ios' ? 'on iPhone' : 'in a wide layout'}. Consider a menu-style Picker or a list.`,
@@ -518,7 +544,8 @@ function checkSegmented(ctx: Ctx) {
 }
 
 export function runHeuristics(src: SwiftSource, platform: ApplePlatform): RawFinding[] {
-  const ctx: Ctx = { src, m: src.masked, platform, out: [] };
+  // Code inside `#if os(...)` branches that don't apply to this platform is blanked first.
+  const ctx: Ctx = { src, m: maskInactivePlatforms(src.masked, platform), platform, out: [] };
   checkHitTargets(ctx);
   checkFonts(ctx);
   checkColors(ctx);

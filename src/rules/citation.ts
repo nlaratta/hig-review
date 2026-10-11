@@ -9,6 +9,7 @@
  */
 
 import type { BlockNode, HIGDoc, InlineNode } from '../hig/doc.js';
+import type { DocInfo } from '../hig/client.js';
 import { docTitle, pageUrl } from '../hig/doc.js';
 
 export interface TextUnit {
@@ -24,6 +25,7 @@ export interface TextUnit {
 }
 
 export interface Citation {
+  /** True only when the phrase matched exactly one sentence on a current (non-stale) copy. */
   verified: boolean;
   page: string;
   url: string;
@@ -31,6 +33,10 @@ export interface Citation {
   /** Full sentence (or table row) from the live page that contains the locator phrase. */
   quote?: string;
   tableHeader?: string;
+  /** When the page copy used for this citation was fetched from Apple (ISO 8601). */
+  retrievedAt?: string;
+  /** 'live' (fetched within the cache lifetime) or 'stale-cache' (Apple unreachable; expired copy). */
+  source?: 'live' | 'stale-cache';
   note?: string;
 }
 
@@ -170,15 +176,19 @@ export function shortenQuote(text: string, phrase: string): string {
 export function citeFromDoc(slug: string, doc: HIGDoc, phrase: string): Citation {
   const page = docTitle(doc);
   const base = pageUrl(slug);
-  const [unit] = findUnits(flattenDoc(doc), phrase);
-  if (!unit) {
+  const units = findUnits(flattenDoc(doc), phrase);
+  if (units.length !== 1) {
     return {
       verified: false,
       page,
       url: base,
-      note: 'Not verified against the current HIG: the source sentence was not found on the live page (Apple may have reworded or removed it). Read the page before relying on this rule.',
+      note:
+        units.length === 0
+          ? 'Not verified against the current HIG: the source sentence was not found on the live page (Apple may have reworded or removed it). Read the page before relying on this rule.'
+          : `Not verified against the current HIG: the locator matches ${units.length} sentences on the page, so the source sentence is ambiguous. Read the page before relying on this rule.`,
     };
   }
+  const unit = units[0];
   const anchor = unit.heading?.anchor;
   return {
     verified: true,
@@ -190,21 +200,40 @@ export function citeFromDoc(slug: string, doc: HIGDoc, phrase: string): Citation
   };
 }
 
-/** Fetches pages through a getter (HIGClient.getDoc) and builds citations; memoizes per slug. */
-export class Citer {
-  private docs = new Map<string, Promise<HIGDoc>>();
+/** Add provenance; a match on a stale fallback copy is reported, but not as verified. */
+export function citeFromInfo(slug: string, info: DocInfo, phrase: string): Citation {
+  const c = citeFromDoc(slug, info.doc, phrase);
+  const retrievedAt = new Date(info.fetchedAt).toISOString();
+  if (!info.stale) return { ...c, retrievedAt, source: 'live' };
+  return {
+    ...c,
+    verified: false,
+    retrievedAt,
+    source: 'stale-cache',
+    note: c.verified
+      ? `Matched against a cached copy from ${retrievedAt}; Apple could not be reached, so this was not verified against the current HIG.`
+      : c.note,
+  };
+}
 
-  constructor(private getDoc: (slug: string) => Promise<HIGDoc>) {}
+/**
+ * Fetches pages through a getter and builds citations. One instance serves one tool call: it
+ * memoizes each page, failures included, so an unreachable page is requested once per call.
+ */
+export class Citer {
+  private docs = new Map<string, Promise<DocInfo>>();
+
+  constructor(private getDocInfo: (slug: string) => Promise<DocInfo>) {}
 
   async cite(slug: string, phrase: string): Promise<Citation> {
     let p = this.docs.get(slug);
     if (!p) {
-      p = this.getDoc(slug);
+      p = this.getDocInfo(slug);
+      p.catch(() => {}); // handled below; keep the rejected promise memoized
       this.docs.set(slug, p);
-      p.catch(() => this.docs.delete(slug));
     }
     try {
-      return citeFromDoc(slug, await p, phrase);
+      return citeFromInfo(slug, await p, phrase);
     } catch (err) {
       return {
         verified: false,

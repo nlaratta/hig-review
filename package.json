@@ -19,7 +19,8 @@
     "smoke": "npm run build && node scripts/smoke.mjs",
     "validate:plugin": "node scripts/validate-plugin.mjs",
     "clean": "rm -rf dist",
-    "smoke:bundle": "npm run build && node scripts/smoke.mjs --bundle"
+    "smoke:bundle": "npm run build && node scripts/smoke.mjs --bundle",
+    "docs:rules": "npm run build && node scripts/rules-doc.mjs"
   },
   "license": "MIT",
   "private": true,

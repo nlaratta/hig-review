@@ -55,7 +55,7 @@ export const TOOLS = [
       properties: {
         code: { type: 'string', description: 'Swift source to review' },
         path: { type: 'string', description: 'Absolute path to a .swift file (relative paths resolve against the server process working directory)' },
-        platform: { ...platformProp, description: 'Platform whose thresholds apply (default ios)' },
+        platform: { ...platformProp, description: 'Platform whose thresholds apply. Pass it explicitly; it defaults to ios, whose thresholds differ from macOS, tvOS, visionOS and watchOS.' },
       },
       required: [],
     },
@@ -63,12 +63,16 @@ export const TOOLS = [
   {
     name: 'check_contrast',
     description:
-      "Deterministic WCAG 2.x contrast ratio between two colors (#RGB, #RRGGBB, #RRGGBBAA or rgb()/rgba(); a translucent foreground is composited over the background). Reports WCAG AA/AAA results and the HIG's own thresholds (4.5:1 for text up to 17 pt, 3:1 for 18 pt and larger or bold text), with live citations.",
+      "Deterministic WCAG 2.x contrast ratio between two colors (#RGB, #RRGGBB, #RRGGBBAA or rgb()/rgba(); a translucent foreground is composited over the background; a translucent background needs an opaque backdrop for a verdict). Reports WCAG AA/AAA results and, separately, the HIG Accessibility table (4.5:1 for non-bold text up to 17 pt, 3:1 for 18 pt and larger or bold text) and the Dark Mode guidance (4.5:1 minimum, 7:1 preferred), with live citations.",
     inputSchema: {
       type: 'object',
       properties: {
         foreground: { type: 'string', description: 'Text or icon color, e.g. "#8E8E93"' },
         background: { type: 'string', description: 'Background color, e.g. "#FFFFFF"' },
+        backdrop: {
+          type: 'string',
+          description: 'Opaque color behind a translucent background. Without it, a translucent background gets no pass/fail.',
+        },
         fontSizePt: { type: 'number', description: 'Text size in points, to pick the applicable HIG threshold' },
         bold: { type: 'boolean', description: 'Whether the text is bold' },
       },
@@ -151,7 +155,7 @@ export class HIGReviewServer {
   }
 
   private citer() {
-    return new Citer((slug) => this.client.getDoc(slug));
+    return new Citer((slug) => this.client.getDocInfo(slug));
   }
 
   private setupHandlers() {
@@ -219,15 +223,12 @@ export class HIGReviewServer {
   private async contrast(p: z.infer<typeof CheckContrastSchema>) {
     const result = checkContrast(p);
     const citer = this.citer();
-    const ids =
-      result.hig.category === null
-        ? ['contrast.text', 'contrast.large-text', 'contrast.bold-text']
-        : result.hig.category === 'regular'
-          ? ['contrast.text']
-          : result.hig.category === 'large'
-            ? ['contrast.large-text']
-            : ['contrast.bold-text'];
-    ids.push('contrast.all-appearances');
+    const table = result.hig.accessibilityTable.ruleId;
+    const ids = [
+      ...(table ? [table] : ['contrast.text', 'contrast.large-text', 'contrast.bold-text']),
+      'contrast.all-appearances',
+      'contrast.preferred',
+    ];
     const citations = [];
     for (const id of ids) {
       const rule = ruleById(id)!;
@@ -236,7 +237,7 @@ export class HIGReviewServer {
     return {
       ...result,
       definitions:
-        'WCAG "large text" is 18 pt, or 14 pt bold. The HIG table (used by Accessibility Inspector) applies 3:1 to text of 18 pt and larger, and to bold text of any size. The Dark Mode page asks for at least 4.5:1 in every appearance and suggests striving for 7:1 with custom colors, especially for small text. Check light and dark color pairs separately.',
+        'WCAG "large text" is 18 pt, or 14 pt bold. The HIG Accessibility table (used by Accessibility Inspector) is separate: 4.5:1 for non-bold text up to 17 pt, 3:1 for 18 pt and larger, and 3:1 for bold text of any size. The Dark Mode page separately asks for no lower than 4.5:1 in every appearance and to strive for 7:1 with custom colors; those are reported as darkModeMinimum and darkModePreferred. Check light and dark color pairs separately.',
       citations,
     };
   }

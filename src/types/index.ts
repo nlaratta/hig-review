@@ -47,6 +47,7 @@ export const ReviewSwiftUISchema = z.object({
 export const CheckContrastSchema = z.object({
   foreground: z.string().min(1),
   background: z.string().min(1),
+  backdrop: z.string().min(1).optional(),
   fontSizePt: z.number().positive().max(1000).optional(),
   bold: z.boolean().optional(),
 });

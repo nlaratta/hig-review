@@ -18546,6 +18546,7 @@ var ReviewSwiftUISchema = external_exports.object({
 var CheckContrastSchema = external_exports.object({
   foreground: external_exports.string().min(1),
   background: external_exports.string().min(1),
+  backdrop: external_exports.string().min(1).optional(),
   fontSizePt: external_exports.number().positive().max(1e3).optional(),
   bold: external_exports.boolean().optional()
 });
@@ -19720,16 +19721,20 @@ var HIGClient = class {
   requestCount = 0;
   /** Fetch a page document. `slug` is the page name ("buttons"); '' is the top-level index. */
   async getDoc(slug) {
+    return (await this.getDocInfo(slug)).doc;
+  }
+  /** Like getDoc, but also reports when the copy was fetched and whether it is a stale fallback. */
+  async getDocInfo(slug) {
     if (slug !== "" && !SLUG_RE.test(slug)) {
       throw new HIGNotFoundError(slug);
     }
     const key2 = slug || "_root";
     const mem = this.memory.get(key2);
-    if (mem && this.isFresh(mem)) return mem.doc;
+    if (mem && this.isFresh(mem)) return { doc: mem.doc, fetchedAt: mem.fetchedAt, stale: false };
     const disk = await this.readDisk(key2);
     if (disk && this.isFresh(disk)) {
       this.memory.set(key2, disk);
-      return disk.doc;
+      return { doc: disk.doc, fetchedAt: disk.fetchedAt, stale: false };
     }
     const pending = this.inflight.get(key2);
     if (pending) return pending;
@@ -19749,18 +19754,18 @@ var HIGClient = class {
       const doc = await this.limiter.execute(
         () => this.backoff.execute(
           () => this.request(url, slug),
-          3,
+          this.opts.retries ?? 3,
           (err) => !(err instanceof HIGNotFoundError)
         )
       );
       const rec = { fetchedAt: Date.now(), doc };
       this.memory.set(key2, rec);
       await this.writeDisk(key2, rec);
-      return doc;
+      return { doc, fetchedAt: rec.fetchedAt, stale: false };
     } catch (err) {
       if (stale && !(err instanceof HIGNotFoundError)) {
         logger.warn("Fetch failed, serving stale cached copy", { slug, error: String(err) });
-        return stale.doc;
+        return { doc: stale.doc, fetchedAt: stale.fetchedAt, stale: true };
       }
       throw err;
     }
@@ -21908,15 +21913,16 @@ function shortenQuote(text, phrase) {
 function citeFromDoc(slug, doc, phrase) {
   const page = docTitle(doc);
   const base = pageUrl(slug);
-  const [unit] = findUnits(flattenDoc(doc), phrase);
-  if (!unit) {
+  const units = findUnits(flattenDoc(doc), phrase);
+  if (units.length !== 1) {
     return {
       verified: false,
       page,
       url: base,
-      note: "Not verified against the current HIG: the source sentence was not found on the live page (Apple may have reworded or removed it). Read the page before relying on this rule."
+      note: units.length === 0 ? "Not verified against the current HIG: the source sentence was not found on the live page (Apple may have reworded or removed it). Read the page before relying on this rule." : `Not verified against the current HIG: the locator matches ${units.length} sentences on the page, so the source sentence is ambiguous. Read the page before relying on this rule.`
     };
   }
+  const unit = units[0];
   const anchor = unit.heading?.anchor;
   return {
     verified: true,
@@ -21927,21 +21933,34 @@ function citeFromDoc(slug, doc, phrase) {
     ...unit.tableHeader ? { tableHeader: unit.tableHeader } : {}
   };
 }
+function citeFromInfo(slug, info, phrase) {
+  const c = citeFromDoc(slug, info.doc, phrase);
+  const retrievedAt = new Date(info.fetchedAt).toISOString();
+  if (!info.stale) return { ...c, retrievedAt, source: "live" };
+  return {
+    ...c,
+    verified: false,
+    retrievedAt,
+    source: "stale-cache",
+    note: c.verified ? `Matched against a cached copy from ${retrievedAt}; Apple could not be reached, so this was not verified against the current HIG.` : c.note
+  };
+}
 var Citer = class {
-  constructor(getDoc) {
-    this.getDoc = getDoc;
+  constructor(getDocInfo) {
+    this.getDocInfo = getDocInfo;
   }
-  getDoc;
+  getDocInfo;
   docs = /* @__PURE__ */ new Map();
   async cite(slug, phrase) {
     let p = this.docs.get(slug);
     if (!p) {
-      p = this.getDoc(slug);
+      p = this.getDocInfo(slug);
+      p.catch(() => {
+      });
       this.docs.set(slug, p);
-      p.catch(() => this.docs.delete(slug));
     }
     try {
-      return citeFromDoc(slug, await p, phrase);
+      return citeFromInfo(slug, await p, phrase);
     } catch (err) {
       return {
         verified: false,
@@ -21955,6 +21974,9 @@ var Citer = class {
 
 // src/rules/registry.ts
 var IOS = ["ios", "ipados"];
+var DARK_MODE = ["ios", "ipados", "macos", "tvos"];
+var NO_WATCH = ["ios", "ipados", "macos", "tvos", "visionos"];
+var NO_VISION = ["ios", "ipados", "macos", "tvos", "watchos"];
 var RULES = [
   // ---------------------------------------------------------------- Controls and hit targets
   {
@@ -21963,8 +21985,8 @@ var RULES = [
     components: ["button", "toggle", "controls", "tab-bar", "toolbar", "accessibility", "segmented-control"],
     platforms: IOS,
     severity: "high",
-    check: "Tappable controls should be at least 44x44 pt by default and never smaller than 28x28 pt (measure the hit area, not just the visible glyph).",
-    source: { slug: "accessibility", phrase: "iOS, iPadOS | 44x44 pt" },
+    check: "Recommended control size is 44x44 pt by default and 28x28 pt at minimum; measure the hit area, not just the visible glyph.",
+    source: { slug: "accessibility", phrase: "iOS, iPadOS | 44x44 pt | 28x28 pt" },
     data: { defaultPt: 44, minimumPt: 28 }
   },
   {
@@ -21973,8 +21995,8 @@ var RULES = [
     components: ["button", "toggle", "controls", "toolbar", "accessibility", "segmented-control"],
     platforms: ["macos"],
     severity: "high",
-    check: "Clickable controls should be at least 28x28 pt by default and never smaller than 20x20 pt.",
-    source: { slug: "accessibility", phrase: "macOS | 28x28 pt" },
+    check: "Recommended control size is 28x28 pt by default and 20x20 pt at minimum.",
+    source: { slug: "accessibility", phrase: "macOS | 28x28 pt | 20x20 pt" },
     data: { defaultPt: 28, minimumPt: 20 }
   },
   {
@@ -21983,8 +22005,8 @@ var RULES = [
     components: ["button", "controls", "tab-bar", "accessibility", "segmented-control"],
     platforms: ["tvos"],
     severity: "high",
-    check: "Focusable controls should be at least 66x66 pt by default and never smaller than 56x56 pt.",
-    source: { slug: "accessibility", phrase: "tvOS | 66x66 pt" },
+    check: "Recommended control size is 66x66 pt by default and 56x56 pt at minimum.",
+    source: { slug: "accessibility", phrase: "tvOS | 66x66 pt | 56x56 pt" },
     data: { defaultPt: 66, minimumPt: 56 }
   },
   {
@@ -21993,8 +22015,8 @@ var RULES = [
     components: ["button", "toggle", "controls", "toolbar", "accessibility", "segmented-control"],
     platforms: ["visionos"],
     severity: "high",
-    check: "Controls should be at least 60x60 pt by default and never smaller than 28x28 pt.",
-    source: { slug: "accessibility", phrase: "visionOS | 60x60 pt" },
+    check: "Recommended control size is 60x60 pt by default and 28x28 pt at minimum.",
+    source: { slug: "accessibility", phrase: "visionOS | 60x60 pt | 28x28 pt" },
     data: { defaultPt: 60, minimumPt: 28 }
   },
   {
@@ -22003,18 +22025,29 @@ var RULES = [
     components: ["button", "toggle", "controls", "accessibility"],
     platforms: ["watchos"],
     severity: "high",
-    check: "Controls should be at least 44x44 pt by default and never smaller than 28x28 pt.",
-    source: { slug: "accessibility", phrase: "watchOS | 44x44 pt" },
+    check: "Recommended control size is 44x44 pt by default and 28x28 pt at minimum.",
+    source: { slug: "accessibility", phrase: "watchOS | 44x44 pt | 28x28 pt" },
     data: { defaultPt: 44, minimumPt: 28 }
   },
   {
-    id: "controls.spacing",
-    title: "Space between controls",
+    id: "controls.spacing.bezeled",
+    title: "Space around bezeled controls",
     components: ["button", "controls", "toolbar", "layout", "accessibility"],
     platforms: "all",
     severity: "medium",
-    check: "Leave room between adjacent controls (roughly 12 pt around bezeled controls, 24 pt around borderless ones) so people do not hit the wrong one.",
-    source: { slug: "accessibility", phrase: "about 12 points of padding" }
+    check: "In general, about 12 pt of padding around controls that have a bezel reduces mis-taps.",
+    source: { slug: "accessibility", phrase: "about 12 points of padding" },
+    data: { paddingPt: 12 }
+  },
+  {
+    id: "controls.spacing.borderless",
+    title: "Space around borderless controls",
+    components: ["button", "controls", "toolbar", "layout", "accessibility"],
+    platforms: "all",
+    severity: "medium",
+    check: "About 24 pt of padding around the visible edges of controls without a bezel works well.",
+    source: { slug: "accessibility", phrase: "about 24 points of padding" },
+    data: { paddingPt: 24 }
   },
   {
     id: "buttons.hit-region",
@@ -22022,8 +22055,9 @@ var RULES = [
     components: ["button"],
     platforms: ["ios", "ipados", "watchos", "visionos"],
     severity: "high",
-    check: "Each button needs enough space around it and a hit region of at least 44x44 pt (60x60 pt in visionOS).",
-    source: { slug: "buttons", phrase: "hit region of at least 44x44 pt" }
+    check: "As a general rule, a button has a hit region of at least 44x44 pt (60x60 pt in visionOS).",
+    source: { slug: "buttons", phrase: "hit region of at least 44x44 pt" },
+    data: { generalPt: 44, visionosPt: 60 }
   },
   {
     id: "buttons.press-state",
@@ -22031,7 +22065,7 @@ var RULES = [
     components: ["button", "controls"],
     platforms: "all",
     severity: "medium",
-    check: "Custom tappable views must visibly react when pressed; a view that acts like a button without a press state feels unresponsive.",
+    check: "Custom buttons, including views that act as buttons, show a press state.",
     source: { slug: "buttons", phrase: "include a press state for a custom button" }
   },
   {
@@ -22040,7 +22074,7 @@ var RULES = [
     components: ["button"],
     platforms: "all",
     severity: "medium",
-    check: "Every button makes its action clear through its symbol, its label or both; ambiguous icons need text.",
+    check: "Each button makes its purpose clear through its symbol, its label or both.",
     source: { slug: "buttons", phrase: "clearly communicates its purpose" }
   },
   {
@@ -22049,7 +22083,7 @@ var RULES = [
     components: ["button"],
     platforms: "all",
     severity: "low",
-    check: "The most likely action in a view uses a prominent button style; avoid several competing prominent buttons.",
+    check: "In general, the most likely action in a view uses a prominent button style.",
     source: { slug: "buttons", phrase: "prominent visual style for the most likely action" }
   },
   {
@@ -22058,7 +22092,7 @@ var RULES = [
     components: ["button", "alert", "action-sheet"],
     platforms: "all",
     severity: "medium",
-    check: "A button that performs a destructive action is never given the primary (default) role.",
+    check: "A button that performs a destructive action does not get the primary role, even when it is the most likely choice.",
     source: { slug: "buttons", phrase: "primary role to a button that performs a destructive action" }
   },
   {
@@ -22067,7 +22101,7 @@ var RULES = [
     components: ["button", "sf-symbols", "toolbar"],
     platforms: "all",
     severity: "low",
-    check: "Common actions (share, add, delete\u2026) use the familiar system symbol rather than a novel glyph.",
+    check: "Where possible, familiar actions use familiar icons.",
     source: { slug: "buttons", phrase: "familiar actions with familiar icons" }
   },
   // ---------------------------------------------------------------- Typography
@@ -22077,7 +22111,7 @@ var RULES = [
     components: ["typography", "accessibility"],
     platforms: ["ios", "ipados", "tvos", "visionos", "watchos"],
     severity: "high",
-    check: "Text uses built-in text styles (or fonts scaled relative to one) so it follows the Dynamic Type setting; fixed point sizes do not scale.",
+    check: "Consider built-in text styles: with system fonts they bring Dynamic Type support. Text set at fixed point sizes does not follow the setting.",
     source: { slug: "typography", phrase: "also ensures support for Dynamic Type" }
   },
   {
@@ -22086,7 +22120,7 @@ var RULES = [
     components: ["typography", "layout", "accessibility"],
     platforms: ["ios", "ipados", "tvos", "visionos", "watchos"],
     severity: "high",
-    check: "At the largest accessibility text sizes the layout still works: nothing clipped or overlapping, rows grow, horizontal stacks can become vertical.",
+    check: "The layout adapts to every font size, and text and glyphs stay legible at each one.",
     source: { slug: "typography", phrase: "layout adapts to all font sizes" }
   },
   {
@@ -22095,7 +22129,7 @@ var RULES = [
     components: ["typography", "list"],
     platforms: ["ios", "ipados", "tvos", "visionos", "watchos"],
     severity: "medium",
-    check: "Text is not truncated more than necessary as font size grows; labels can wrap to multiple lines.",
+    check: "Text truncation stays to a minimum as the font size increases.",
     source: { slug: "typography", phrase: "Keep text truncation to a minimum" }
   },
   {
@@ -22104,7 +22138,7 @@ var RULES = [
     components: ["typography"],
     platforms: "all",
     severity: "low",
-    check: "Body and UI text avoids Ultralight, Thin and Light weights, which are hard to read at small sizes.",
+    check: "In general, text avoids light font weights.",
     source: { slug: "typography", phrase: "avoid light font weights" }
   },
   {
@@ -22113,7 +22147,7 @@ var RULES = [
     components: ["typography", "accessibility"],
     platforms: IOS,
     severity: "medium",
-    check: "Default text size is about 17 pt; no text should be smaller than 11 pt.",
+    check: "Recommended text size is 17 pt by default and 11 pt at minimum.",
     source: { slug: "typography", phrase: "iOS, iPadOS | 17 pt | 11 pt" },
     data: { defaultPt: 17, minimumPt: 11 }
   },
@@ -22123,7 +22157,7 @@ var RULES = [
     components: ["typography", "accessibility"],
     platforms: ["macos"],
     severity: "medium",
-    check: "Default text size is about 13 pt; no text should be smaller than 10 pt.",
+    check: "Recommended text size is 13 pt by default and 10 pt at minimum.",
     source: { slug: "typography", phrase: "macOS | 13 pt | 10 pt" },
     data: { defaultPt: 13, minimumPt: 10 }
   },
@@ -22133,7 +22167,7 @@ var RULES = [
     components: ["typography", "accessibility"],
     platforms: ["tvos"],
     severity: "medium",
-    check: "Default text size is about 29 pt; no text should be smaller than 23 pt.",
+    check: "Recommended text size is 29 pt by default and 23 pt at minimum.",
     source: { slug: "typography", phrase: "tvOS | 29 pt | 23 pt" },
     data: { defaultPt: 29, minimumPt: 23 }
   },
@@ -22143,7 +22177,7 @@ var RULES = [
     components: ["typography", "accessibility"],
     platforms: ["visionos"],
     severity: "medium",
-    check: "Default text size is about 17 pt; no text should be smaller than 12 pt.",
+    check: "Recommended text size is 17 pt by default and 12 pt at minimum.",
     source: { slug: "typography", phrase: "visionOS | 17 pt | 12 pt" },
     data: { defaultPt: 17, minimumPt: 12 }
   },
@@ -22153,7 +22187,7 @@ var RULES = [
     components: ["typography", "accessibility"],
     platforms: ["watchos"],
     severity: "medium",
-    check: "Default text size is about 16 pt; no text should be smaller than 12 pt.",
+    check: "Recommended text size is 16 pt by default and 12 pt at minimum.",
     source: { slug: "typography", phrase: "watchOS | 16 pt | 12 pt" },
     data: { defaultPt: 16, minimumPt: 12 }
   },
@@ -22163,8 +22197,9 @@ var RULES = [
     components: ["typography", "accessibility"],
     platforms: "all",
     severity: "medium",
-    check: "People can enlarge text by at least 200% (140% on watchOS), through Dynamic Type or custom controls.",
-    source: { slug: "accessibility", phrase: "enlarge text by at least 200 percent" }
+    check: "Ideally, people can enlarge text by at least 200 percent (140 percent in watchOS apps), through Dynamic Type or custom UI.",
+    source: { slug: "accessibility", phrase: "enlarge text by at least 200 percent" },
+    data: { percent: 200, watchosPercent: 140 }
   },
   // ---------------------------------------------------------------- Color and contrast
   {
@@ -22173,7 +22208,7 @@ var RULES = [
     components: ["color", "typography", "accessibility", "dark-mode"],
     platforms: "all",
     severity: "high",
-    check: "Text up to 17 pt has a contrast ratio of at least 4.5:1 against its background (check with check_contrast).",
+    check: "Non-bold text up to 17 pt has a contrast ratio of at least 4.5:1 (Accessibility Inspector table; bold text follows contrast.bold-text). Measure with check_contrast.",
     source: { slug: "accessibility", phrase: "Up to 17 pts | All | 4.5:1" },
     data: { maxPt: 17, ratio: 4.5 }
   },
@@ -22183,7 +22218,7 @@ var RULES = [
     components: ["color", "typography", "accessibility"],
     platforms: "all",
     severity: "high",
-    check: "Text of 18 pt or larger has a contrast ratio of at least 3:1.",
+    check: "Text of 18 pt or larger has a contrast ratio of at least 3:1 (Accessibility Inspector table).",
     source: { slug: "accessibility", phrase: "18 pts | All | 3:1" },
     data: { minPt: 18, ratio: 3 }
   },
@@ -22193,7 +22228,7 @@ var RULES = [
     components: ["color", "typography", "accessibility"],
     platforms: "all",
     severity: "high",
-    check: "Bold text has a contrast ratio of at least 3:1.",
+    check: "Bold text of any size has a contrast ratio of at least 3:1 (Accessibility Inspector table).",
     source: { slug: "accessibility", phrase: "All | Bold | 3:1" },
     data: { ratio: 3 }
   },
@@ -22201,11 +22236,21 @@ var RULES = [
     id: "contrast.all-appearances",
     title: "Contrast in every appearance",
     components: ["color", "dark-mode", "accessibility"],
-    platforms: "all",
+    platforms: DARK_MODE,
     severity: "high",
-    check: "Contrast holds in both light and dark appearances: never below 4.5:1, ideally 7:1 for custom colors and small text.",
+    check: "At a minimum, the contrast ratio between colors is no lower than 4.5:1, in every appearance (Dark Mode guidance).",
     source: { slug: "dark-mode", phrase: "no lower than 4.5:1" },
-    data: { ratio: 4.5, preferredRatio: 7 }
+    data: { ratio: 4.5 }
+  },
+  {
+    id: "contrast.preferred",
+    title: "Preferred 7:1 for custom colors",
+    components: ["color", "dark-mode", "accessibility"],
+    platforms: DARK_MODE,
+    severity: "low",
+    check: "For custom foreground and background colors, strive for 7:1, especially in small text. This is a preferred target, not a minimum.",
+    source: { slug: "dark-mode", phrase: "strive for a contrast ratio of 7:1" },
+    data: { ratio: 7 }
   },
   {
     id: "color.not-alone",
@@ -22213,7 +22258,7 @@ var RULES = [
     components: ["color", "accessibility", "list", "tab-bar"],
     platforms: "all",
     severity: "high",
-    check: "State, status and interactivity are also shown with shape, icon or text, not color alone.",
+    check: "Information is conveyed with more than color alone.",
     source: { slug: "accessibility", phrase: "more than color alone" }
   },
   {
@@ -22222,7 +22267,7 @@ var RULES = [
     components: ["color", "dark-mode", "accessibility"],
     platforms: "all",
     severity: "medium",
-    check: "Use system-defined (semantic) colors where possible; they adapt to Dark Mode and Increase Contrast.",
+    check: "Prefer system-defined colors, which have accessible variants that adapt automatically.",
     source: { slug: "accessibility", phrase: "Prefer system-defined colors" }
   },
   {
@@ -22231,7 +22276,7 @@ var RULES = [
     components: ["color", "dark-mode"],
     platforms: "all",
     severity: "medium",
-    check: "Every custom color has variants that work in light, dark and increased-contrast modes.",
+    check: "Every color the app uses works well in light, dark and increased-contrast contexts.",
     source: { slug: "color", phrase: "light, dark, and increased contrast contexts" }
   },
   {
@@ -22240,7 +22285,7 @@ var RULES = [
     components: ["color"],
     platforms: "all",
     severity: "low",
-    check: "A color means the same thing everywhere (e.g. the tint used for interactive elements is not used for plain text).",
+    check: "A color does not mean different things in different places.",
     source: { slug: "color", phrase: "same color to mean different things" }
   },
   {
@@ -22249,7 +22294,7 @@ var RULES = [
     components: ["color", "dark-mode"],
     platforms: "all",
     severity: "low",
-    check: "Dynamic system colors are used for their stated purpose (no separator color for text, no label color for backgrounds).",
+    check: "Dynamic system colors keep their semantic meaning; they are not repurposed.",
     source: { slug: "color", phrase: "redefining the semantic meanings" }
   },
   // ---------------------------------------------------------------- Dark Mode
@@ -22257,36 +22302,36 @@ var RULES = [
     id: "dark.adaptive-colors",
     title: "Colors adapt to the appearance",
     components: ["dark-mode", "color"],
-    platforms: "all",
+    platforms: DARK_MODE,
     severity: "low",
-    check: "Avoid hard-coded color values; use semantic colors or asset-catalog color sets with light and dark variants.",
+    check: "Avoid hard-coded color values and colors that do not adapt to the current appearance.",
     source: { slug: "dark-mode", phrase: "hard-coded color values or colors" }
   },
   {
     id: "dark.both-modes",
     title: "Looks right in both appearances",
     components: ["dark-mode"],
-    platforms: "all",
+    platforms: DARK_MODE,
     severity: "medium",
-    check: "The UI looks good and stays legible in both light and dark appearance; review both screenshots.",
+    check: "The app looks good in both appearance modes; review both when you can.",
     source: { slug: "dark-mode", phrase: "looks good in both appearance modes" }
   },
   {
     id: "dark.no-app-setting",
     title: "No app-specific appearance setting",
     components: ["dark-mode"],
-    platforms: "all",
+    platforms: DARK_MODE,
     severity: "low",
-    check: "The app follows the system appearance rather than offering its own light/dark switch.",
+    check: "Avoid an app-specific appearance setting.",
     source: { slug: "dark-mode", phrase: "app-specific appearance setting" }
   },
   {
     id: "dark.label-colors",
     title: "System label colors for text",
     components: ["dark-mode", "typography", "color"],
-    platforms: "all",
+    platforms: DARK_MODE,
     severity: "low",
-    check: "Labels use the primary/secondary/tertiary/quaternary system label colors so they adapt automatically.",
+    check: "Labels use the system-provided label colors.",
     source: { slug: "dark-mode", phrase: "system-provided label colors for labels" }
   },
   {
@@ -22295,7 +22340,7 @@ var RULES = [
     components: ["dark-mode", "color", "sheet"],
     platforms: IOS,
     severity: "low",
-    check: "Backgrounds use system background colors so modal and elevated surfaces get the right base/elevated variants.",
+    check: "Prefer the system background colors.",
     source: { slug: "dark-mode", phrase: "Prefer the system background colors" }
   },
   // ---------------------------------------------------------------- VoiceOver and accessibility
@@ -22305,7 +22350,7 @@ var RULES = [
     components: ["accessibility", "button", "image", "tab-bar", "toolbar", "sf-symbols"],
     platforms: "all",
     severity: "high",
-    check: "Every key element, especially icon-only buttons, has a descriptive accessibility label for VoiceOver.",
+    check: "Key interface elements, icon-only buttons included, have alternative labels for VoiceOver.",
     source: { slug: "voiceover", phrase: "alternative labels for all key interface elements" }
   },
   {
@@ -22314,7 +22359,7 @@ var RULES = [
     components: ["accessibility", "controls"],
     platforms: "all",
     severity: "medium",
-    check: "Custom-drawn or custom-composed controls carry their own accessibility labels.",
+    check: "Custom elements have their own accessibility labels.",
     source: { slug: "voiceover", phrase: "labels to any custom elements" }
   },
   {
@@ -22323,7 +22368,7 @@ var RULES = [
     components: ["accessibility", "image"],
     platforms: "all",
     severity: "medium",
-    check: "Images that carry information have a description; describe only what the image itself conveys.",
+    check: "Meaningful images are described for VoiceOver.",
     source: { slug: "voiceover", phrase: "Describe meaningful images" }
   },
   {
@@ -22332,7 +22377,7 @@ var RULES = [
     components: ["accessibility", "image"],
     platforms: "all",
     severity: "low",
-    check: "Purely decorative images are hidden from VoiceOver.",
+    check: "Purely decorative images are excluded from VoiceOver.",
     source: { slug: "voiceover", phrase: "Exclude purely decorative images" }
   },
   {
@@ -22341,7 +22386,7 @@ var RULES = [
     components: ["accessibility", "gestures", "list"],
     platforms: "all",
     severity: "medium",
-    check: "Anything done with a gesture (swipe to delete, long press) can also be done with a visible control.",
+    check: "Gesture-driven interactions have an alternative way to achieve the same outcome.",
     source: { slug: "accessibility", phrase: "Offer alternatives to gestures" }
   },
   // ---------------------------------------------------------------- Layout
@@ -22351,7 +22396,7 @@ var RULES = [
     components: ["layout"],
     platforms: "all",
     severity: "high",
-    check: "Content and controls stay inside the safe area: nothing under the Dynamic Island, status bar, home indicator or bars. Backgrounds may extend edge to edge.",
+    check: "Content and controls respect the safe area, so system UI and hardware features such as the Dynamic Island do not obstruct them.",
     source: { slug: "layout", phrase: "Respecting the safe area is essential" }
   },
   {
@@ -22360,7 +22405,7 @@ var RULES = [
     components: ["layout", "tab-bar", "toolbar"],
     platforms: "all",
     severity: "low",
-    check: "Full-screen background content extends underneath sidebars, toolbars and tab bars instead of stopping at them.",
+    check: "Full-screen background content extends underneath sidebars, toolbars and tab bars.",
     source: { slug: "layout", phrase: "For full-screen background content" }
   },
   {
@@ -22369,7 +22414,7 @@ var RULES = [
     components: ["layout"],
     platforms: "all",
     severity: "medium",
-    check: "Layout decisions use the available space (size classes, container size), not device type, screen bounds or orientation.",
+    check: "Layout decisions are based on size classes, not device type or orientation.",
     source: { slug: "layout", phrase: "based on size classes, not device type" }
   },
   {
@@ -22378,7 +22423,7 @@ var RULES = [
     components: ["layout"],
     platforms: "all",
     severity: "medium",
-    check: "The layout adapts to rotation, window resizing and other devices while respecting system margins and guides.",
+    check: "The layout adapts by respecting system-defined safe areas, margins and guides.",
     source: { slug: "layout", phrase: "safe areas, margins, and guides" }
   },
   {
@@ -22387,7 +22432,7 @@ var RULES = [
     components: ["layout", "typography"],
     platforms: "all",
     severity: "medium",
-    check: "Containers grow with text; adjacent views can stack vertically when text gets large.",
+    check: "The layout is prepared for text-size changes.",
     source: { slug: "layout", phrase: "Be prepared for text-size changes" }
   },
   {
@@ -22396,7 +22441,7 @@ var RULES = [
     components: ["layout", "toolbar", "tab-bar"],
     platforms: "all",
     severity: "low",
-    check: "Controls read as a distinct layer above content (system materials and scroll edge effects rather than opaque custom bars).",
+    check: "Controls are visually differentiated from content.",
     source: { slug: "layout", phrase: "Differentiate controls from content" }
   },
   // ---------------------------------------------------------------- Tab bars
@@ -22404,63 +22449,63 @@ var RULES = [
     id: "tabbar.navigation-only",
     title: "Tab bars navigate, not act",
     components: ["tab-bar"],
-    platforms: "all",
+    platforms: NO_WATCH,
     severity: "high",
-    check: "Tabs switch between sections; actions on the current view belong in a toolbar, not the tab bar.",
+    check: "The tab bar supports navigation, not actions.",
     source: { slug: "tab-bars", phrase: "support navigation, not to provide actions" }
   },
   {
     id: "tabbar.visible",
     title: "Tab bar stays visible",
     components: ["tab-bar"],
-    platforms: "all",
+    platforms: NO_WATCH,
     severity: "medium",
-    check: "The tab bar remains visible across sections (a modal covering it is the exception).",
+    check: "The tab bar stays visible when people move between sections.",
     source: { slug: "tab-bars", phrase: "Make sure the tab bar is visible" }
   },
   {
     id: "tabbar.tab-count",
     title: "Appropriate number of tabs",
     components: ["tab-bar"],
-    platforms: "all",
+    platforms: NO_WATCH,
     severity: "medium",
-    check: "Only as many tabs as navigation needs; consider a sidebar (or sidebar-adaptable tab bar) for complex hierarchies.",
+    check: "The number of tabs is what navigation needs; fewer tabs are generally easier to navigate.",
     source: { slug: "tab-bars", phrase: "appropriate number of tabs" }
   },
   {
     id: "tabbar.no-overflow",
     title: "Avoid overflow tabs",
     components: ["tab-bar"],
-    platforms: "all",
+    platforms: NO_WATCH,
     severity: "medium",
-    check: "All tabs fit without a More tab on the smallest supported width.",
+    check: "Avoid situations where tabs overflow into a More tab.",
     source: { slug: "tab-bars", phrase: "Avoid overflow tabs" }
   },
   {
     id: "tabbar.no-disabled-tabs",
     title: "Never disable or hide tabs",
     components: ["tab-bar"],
-    platforms: "all",
+    platforms: NO_WATCH,
     severity: "medium",
-    check: "Tabs are never greyed out or removed when their content is unavailable; the tab explains why it is empty.",
+    check: "Tab bar buttons are not disabled or hidden, even when their content is unavailable.",
     source: { slug: "tab-bars", phrase: "disable or hide tab bar buttons" }
   },
   {
     id: "tabbar.labels",
     title: "Tabs have labels",
     components: ["tab-bar"],
-    platforms: "all",
+    platforms: NO_WATCH,
     severity: "medium",
-    check: "Each tab has a short (ideally single-word) text label, not just an icon.",
+    check: "Tabs include labels.",
     source: { slug: "tab-bars", phrase: "Include tab labels" }
   },
   {
     id: "tabbar.symbols",
     title: "SF Symbols for tab icons",
     components: ["tab-bar", "sf-symbols"],
-    platforms: "all",
+    platforms: NO_WATCH,
     severity: "low",
-    check: "Tab icons are SF Symbols (preferably filled) so they adapt between compact and regular layouts.",
+    check: "Prefer SF Symbols for tab bar icons; suitable custom icons are also acceptable.",
     source: { slug: "tab-bars", phrase: "familiar, scalable tab bar icons" }
   },
   // ---------------------------------------------------------------- Toolbars and navigation bars
@@ -22470,7 +22515,7 @@ var RULES = [
     components: ["toolbar"],
     platforms: "all",
     severity: "medium",
-    check: "The toolbar holds only the essential items; extras go in a More menu.",
+    check: "Toolbar items are chosen deliberately, so the toolbar is not overcrowded.",
     source: { slug: "toolbars", phrase: "avoid overcrowding" }
   },
   {
@@ -22479,7 +22524,7 @@ var RULES = [
     components: ["toolbar"],
     platforms: "all",
     severity: "medium",
-    check: "Navigation uses the standard Back and Close buttons rather than custom replacements.",
+    check: "Navigation uses the standard Back and Close buttons.",
     source: { slug: "toolbars", phrase: "standard Back and Close buttons" }
   },
   {
@@ -22488,7 +22533,7 @@ var RULES = [
     components: ["toolbar"],
     platforms: "all",
     severity: "medium",
-    check: "The meaning of every toolbar control is clear from its symbol or label.",
+    check: "The meaning of each toolbar control is clear.",
     source: { slug: "toolbars", phrase: "meaning of each control is clear" }
   },
   {
@@ -22497,7 +22542,7 @@ var RULES = [
     components: ["toolbar"],
     platforms: "all",
     severity: "low",
-    check: "Each screen or window has a useful, concise title, not just the app name.",
+    check: "Each window has a useful title.",
     source: { slug: "toolbars", phrase: "useful title for each window" }
   },
   {
@@ -22506,7 +22551,7 @@ var RULES = [
     components: ["toolbar"],
     platforms: ["ios"],
     severity: "low",
-    check: "Top-level screens use a large title that helps people stay oriented while scrolling.",
+    check: "Consider a large title to help people stay oriented as they navigate and scroll.",
     source: { slug: "toolbars", phrase: "Use a large title" }
   },
   // ---------------------------------------------------------------- Alerts and action sheets
@@ -22516,7 +22561,7 @@ var RULES = [
     components: ["alert"],
     platforms: "all",
     severity: "medium",
-    check: "An alert has a title, optional message and no more than three buttons; use an action sheet for more choices.",
+    check: "An alert shows a title, optional informative text and no more than three buttons.",
     source: { slug: "alerts", phrase: "up to three buttons" },
     data: { maxButtons: 3 }
   },
@@ -22526,7 +22571,7 @@ var RULES = [
     components: ["alert"],
     platforms: "all",
     severity: "low",
-    check: "Alerts are reserved for important, actionable information, not routine confirmations or plain information.",
+    check: "Alerts are used sparingly.",
     source: { slug: "alerts", phrase: "Use alerts sparingly" }
   },
   {
@@ -22535,7 +22580,7 @@ var RULES = [
     components: ["alert", "launch", "onboarding"],
     platforms: "all",
     severity: "medium",
-    check: "The app does not greet people with an alert when it starts.",
+    check: "Avoid showing an alert when the app starts.",
     source: { slug: "alerts", phrase: "alert when your app starts" }
   },
   {
@@ -22553,7 +22598,7 @@ var RULES = [
     components: ["alert"],
     platforms: "all",
     severity: "low",
-    check: 'Alert buttons have one- or two-word titles that name the result ("Delete", "Reply"), not "Yes"/"No".',
+    check: "Alert button titles aim for one or two words that describe the result of choosing them.",
     source: { slug: "alerts", phrase: "one- or two-word title" }
   },
   {
@@ -22562,7 +22607,7 @@ var RULES = [
     components: ["alert"],
     platforms: "all",
     severity: "low",
-    check: '"OK" is only used in purely informational alerts.',
+    check: 'Avoid "OK" as the default button title unless the alert is purely informational.',
     source: { slug: "alerts", phrase: "Avoid using OK as the default button title" }
   },
   {
@@ -22571,25 +22616,25 @@ var RULES = [
     components: ["alert"],
     platforms: "all",
     severity: "medium",
-    check: 'An alert offering a destructive action also offers a button titled "Cancel".',
+    check: "An alert that offers a destructive action also includes a Cancel button.",
     source: { slug: "alerts", phrase: "clear, safe way to avoid the action" }
   },
   {
     id: "actionsheet.intentional-action",
     title: "Action sheet for choices about an action",
     components: ["action-sheet", "alert"],
-    platforms: "all",
+    platforms: NO_VISION,
     severity: "low",
-    check: "Choices related to something the person deliberately started are offered in an action sheet, not an alert.",
+    check: "Choices related to an intentional action are offered in an action sheet, not an alert.",
     source: { slug: "action-sheets", phrase: "choices related to an intentional action" }
   },
   {
     id: "actionsheet.cancel",
     title: "Cancel for data-destroying actions",
     components: ["action-sheet"],
-    platforms: "all",
+    platforms: NO_VISION,
     severity: "medium",
-    check: "An action sheet that can destroy data includes a Cancel button.",
+    check: "If necessary, an action sheet includes a Cancel button so people can reject an action that might destroy data.",
     source: { slug: "action-sheets", phrase: "action that might destroy data" }
   },
   {
@@ -22598,7 +22643,7 @@ var RULES = [
     components: ["action-sheet"],
     platforms: ["watchos"],
     severity: "medium",
-    check: "On watchOS an action sheet shows no more than four buttons including Cancel.",
+    check: "On watchOS, avoid more than four buttons in an action sheet, including Cancel.",
     source: { slug: "action-sheets", phrase: "more than four buttons in an action sheet" },
     data: { maxButtons: 4 }
   },
@@ -22609,7 +22654,7 @@ var RULES = [
     components: ["sheet"],
     platforms: "all",
     severity: "medium",
-    check: "Only one sheet is presented from the main interface at a time; no stacked sheets.",
+    check: "Only one sheet is shown at a time from the main interface.",
     source: { slug: "sheets", phrase: "only one sheet at a time" }
   },
   {
@@ -22618,7 +22663,7 @@ var RULES = [
     components: ["sheet"],
     platforms: "all",
     severity: "low",
-    check: "Long or complex flows are not crammed into a sheet.",
+    check: "For complex or prolonged flows, consider alternatives to a sheet.",
     source: { slug: "sheets", phrase: "consider alternatives to sheets" }
   },
   {
@@ -22627,7 +22672,7 @@ var RULES = [
     components: ["sheet"],
     platforms: IOS,
     severity: "low",
-    check: "A resizable sheet (with detents) shows a grabber.",
+    check: "A resizable sheet includes a grabber.",
     source: { slug: "sheets", phrase: "grabber in a resizable sheet" }
   },
   {
@@ -22636,7 +22681,7 @@ var RULES = [
     components: ["sheet"],
     platforms: IOS,
     severity: "medium",
-    check: "Sheets can be dismissed by swiping down (confirm before discarding unsaved changes).",
+    check: "Sheets support swiping to dismiss.",
     source: { slug: "sheets", phrase: "swiping to dismiss a sheet" }
   },
   // ---------------------------------------------------------------- Lists and tables
@@ -22646,7 +22691,7 @@ var RULES = [
     components: ["list"],
     platforms: "all",
     severity: "low",
-    check: "Row text is short enough to read comfortably without heavy truncation.",
+    check: "Item text in rows is succinct.",
     source: { slug: "lists-and-tables", phrase: "Keep item text succinct" }
   },
   {
@@ -22655,7 +22700,7 @@ var RULES = [
     components: ["list"],
     platforms: "all",
     severity: "medium",
-    check: "Selecting a row gives visible feedback (highlight, navigation, checkmark).",
+    check: "Selecting a list item gives appropriate feedback.",
     source: { slug: "lists-and-tables", phrase: "feedback when people select a list item" }
   },
   {
@@ -22664,7 +22709,7 @@ var RULES = [
     components: ["list"],
     platforms: ["ios", "ipados", "visionos"],
     severity: "low",
-    check: "A row info button reveals more information about the row, never navigation or actions.",
+    check: "A row info button is used only to reveal more information about the row content.",
     source: { slug: "lists-and-tables", phrase: "info button only to reveal more information" }
   },
   // ---------------------------------------------------------------- Toggles, segmented controls, text fields
@@ -22674,7 +22719,7 @@ var RULES = [
     components: ["toggle"],
     platforms: IOS,
     severity: "medium",
-    check: "The switch style is used in list rows; outside a list, use a button that behaves like a toggle.",
+    check: "The switch toggle style is used only in list rows.",
     source: { slug: "toggles", phrase: "switch toggle style only in a list row" }
   },
   {
@@ -22683,7 +22728,7 @@ var RULES = [
     components: ["toggle"],
     platforms: "all",
     severity: "medium",
-    check: "It is clear which setting or content each toggle affects.",
+    check: "It is clear which setting, view or content each toggle affects.",
     source: { slug: "toggles", phrase: "content the toggle affects" }
   },
   {
@@ -22692,16 +22737,16 @@ var RULES = [
     components: ["toggle"],
     platforms: "all",
     severity: "medium",
-    check: "On and off states differ visibly (not just by a subtle tint).",
+    check: "The visual difference between a toggle's states is obvious.",
     source: { slug: "toggles", phrase: "visual differences in a toggle" }
   },
   {
     id: "segmented.count",
     title: "Limit segments",
     components: ["segmented-control"],
-    platforms: "all",
+    platforms: NO_WATCH,
     severity: "medium",
-    check: "A segmented control has about five segments at most on iPhone, five to seven in wide layouts.",
+    check: "Aim for no more than about five segments on iPhone, and about five to seven in a wide interface.",
     source: { slug: "segmented-controls", phrase: "about five segments on iPhone" },
     data: { maxIphone: 5, maxWide: 7 }
   },
@@ -22709,9 +22754,9 @@ var RULES = [
     id: "segmented.text-or-images",
     title: "Text or images, not both",
     components: ["segmented-control"],
-    platforms: "all",
+    platforms: NO_WATCH,
     severity: "low",
-    check: "Segments use either text or images consistently, not a mix.",
+    check: "Prefer either text or images in a single segmented control, not a mix.",
     source: { slug: "segmented-controls", phrase: "either text or images" }
   },
   {
@@ -22720,7 +22765,7 @@ var RULES = [
     components: ["text-field"],
     platforms: "all",
     severity: "low",
-    check: "Text fields show a placeholder hint describing their purpose (in addition to a label where needed).",
+    check: "Text fields show a hint that communicates their purpose.",
     source: { slug: "text-fields", phrase: "Show a hint in a text field" }
   },
   {
@@ -22729,7 +22774,7 @@ var RULES = [
     components: ["text-field"],
     platforms: "all",
     severity: "high",
-    check: "Passwords and other sensitive input use a secure text field.",
+    check: "Sensitive data such as passwords is entered in a secure text field.",
     source: { slug: "text-fields", phrase: "Always use a secure text field" }
   },
   {
@@ -22738,7 +22783,7 @@ var RULES = [
     components: ["text-field"],
     platforms: ["ios", "ipados", "tvos", "visionos"],
     severity: "low",
-    check: "Each field shows the keyboard that fits its content (email, number, URL\u2026).",
+    check: "Each field shows the keyboard type that fits its content.",
     source: { slug: "text-fields", phrase: "show the appropriate keyboard type" }
   },
   // ---------------------------------------------------------------- Gestures
@@ -22748,7 +22793,7 @@ var RULES = [
     components: ["gestures"],
     platforms: "all",
     severity: "medium",
-    check: "Core actions are reachable by more than one kind of interaction.",
+    check: "People have more than one way to interact with the app.",
     source: { slug: "gestures", phrase: "more than one way to interact" }
   },
   {
@@ -22757,7 +22802,7 @@ var RULES = [
     components: ["gestures"],
     platforms: "all",
     severity: "medium",
-    check: "Custom gestures do not conflict with system edge gestures (Home, Control Center, back swipe).",
+    check: "Custom gestures avoid conflicting with gestures that access system UI.",
     source: { slug: "gestures", phrase: "gestures that access system UI" }
   },
   // ---------------------------------------------------------------- SF Symbols
@@ -22767,7 +22812,7 @@ var RULES = [
     components: ["sf-symbols"],
     platforms: "all",
     severity: "low",
-    check: "Each symbol rendering mode (monochrome, hierarchical, palette, multicolor) reads well in every context it appears in.",
+    check: "Each symbol's rendering mode works well in every context it appears in.",
     source: { slug: "sf-symbols", phrase: "rendering mode works well in every context" }
   },
   {
@@ -22776,7 +22821,7 @@ var RULES = [
     components: ["sf-symbols", "typography", "accessibility"],
     platforms: ["ios", "ipados", "tvos", "visionos", "watchos"],
     severity: "medium",
-    check: "Meaningful interface icons get larger as the text size increases (SF Symbols do this automatically).",
+    check: "Meaningful interface icons get larger as the font size increases.",
     source: { slug: "typography", phrase: "meaningful interface icons as font size increases" }
   },
   {
@@ -22785,7 +22830,7 @@ var RULES = [
     components: ["sf-symbols"],
     platforms: "all",
     severity: "low",
-    check: "Symbol animations are used sparingly and communicate something.",
+    check: "Symbol animations are applied judiciously.",
     source: { slug: "sf-symbols", phrase: "symbol animations judiciously" }
   },
   // ---------------------------------------------------------------- App icons
@@ -22795,7 +22840,7 @@ var RULES = [
     components: ["app-icon"],
     platforms: "all",
     severity: "medium",
-    check: "The main icon content is centered so masking and corner adjustments do not cut it off.",
+    check: "The primary icon content is centered so masking and corner adjustments do not truncate it.",
     source: { slug: "app-icons", phrase: "Keep primary content centered" }
   },
   {
@@ -22804,7 +22849,7 @@ var RULES = [
     components: ["app-icon"],
     platforms: "all",
     severity: "low",
-    check: "The icon contains no text unless it is essential to the brand.",
+    check: "The icon includes text only when it is essential to the experience or brand.",
     source: { slug: "app-icons", phrase: "Include text only when" }
   },
   {
@@ -22813,7 +22858,7 @@ var RULES = [
     components: ["app-icon"],
     platforms: "all",
     severity: "low",
-    check: "The icon uses illustration rather than photos and does not mimic UI components.",
+    check: "Prefer illustrations to photos, and avoid replicating UI components.",
     source: { slug: "app-icons", phrase: "Prefer illustrations to photos" }
   },
   {
@@ -22822,7 +22867,7 @@ var RULES = [
     components: ["app-icon"],
     platforms: "all",
     severity: "medium",
-    check: "The icon does not depict Apple hardware products.",
+    check: "The icon does not use replicas of Apple hardware products.",
     source: { slug: "app-icons", phrase: "replicas of Apple hardware products" }
   },
   {
@@ -22831,7 +22876,7 @@ var RULES = [
     components: ["app-icon"],
     platforms: "all",
     severity: "low",
-    check: "The icon design is visually consistent on every platform the app supports.",
+    check: "The icon design is visually consistent across the platforms the app supports.",
     source: { slug: "app-icons", phrase: "visually consistent icon design" }
   },
   {
@@ -22840,7 +22885,7 @@ var RULES = [
     components: ["app-icon", "dark-mode"],
     platforms: "all",
     severity: "low",
-    check: "Dark and tinted icon variants keep the same features and sit comfortably beside system icons.",
+    check: "The icon keeps its features consistent across appearances (light, dark, tinted).",
     source: { slug: "app-icons", phrase: "features consistent across appearances" }
   },
   {
@@ -22849,7 +22894,7 @@ var RULES = [
     components: ["app-icon"],
     platforms: ["watchos"],
     severity: "low",
-    check: "A watchOS icon does not use a black background.",
+    check: "On watchOS, avoid a black icon background.",
     source: { slug: "app-icons", phrase: "Avoid using black for your icon" }
   },
   // ---------------------------------------------------------------- Onboarding and launch
@@ -22859,7 +22904,7 @@ var RULES = [
     components: ["onboarding"],
     platforms: "all",
     severity: "low",
-    check: "Onboarding lets people try things rather than read pages of instructions.",
+    check: "Onboarding teaches through interactivity.",
     source: { slug: "onboarding", phrase: "Teach through interactivity" }
   },
   {
@@ -22868,7 +22913,7 @@ var RULES = [
     components: ["onboarding"],
     platforms: "all",
     severity: "medium",
-    check: "Any required onboarding flow is brief and does not ask people to memorize much.",
+    check: "If a prerequisite onboarding flow is needed, it is brief and does not ask people to memorize a lot.",
     source: { slug: "onboarding", phrase: "brief, enjoyable experience" }
   },
   {
@@ -22877,7 +22922,7 @@ var RULES = [
     components: ["onboarding"],
     platforms: "all",
     severity: "low",
-    check: "A separate tutorial can be skipped.",
+    check: "Consider making a separate tutorial optional.",
     source: { slug: "onboarding", phrase: "consider making it optional" }
   },
   {
@@ -22886,7 +22931,7 @@ var RULES = [
     components: ["onboarding"],
     platforms: "all",
     severity: "low",
-    check: "Licensing details are not shown in the onboarding flow.",
+    check: "Avoid licensing details in the onboarding flow.",
     source: { slug: "onboarding", phrase: "licensing details within your onboarding flow" }
   },
   {
@@ -22895,7 +22940,7 @@ var RULES = [
     components: ["onboarding"],
     platforms: "all",
     severity: "low",
-    check: "Optional setup and customization steps come later, not before people can use the app.",
+    check: "Nonessential setup and customization steps are postponed.",
     source: { slug: "onboarding", phrase: "Postpone nonessential setup flows" }
   },
   {
@@ -22904,7 +22949,7 @@ var RULES = [
     components: ["onboarding"],
     platforms: "all",
     severity: "medium",
-    check: "People experience the app before being asked for ratings or purchases.",
+    check: "Prefer letting people experience the app before prompting for ratings or purchases.",
     source: { slug: "onboarding", phrase: "prompting them for ratings or purchases" }
   },
   {
@@ -22913,7 +22958,7 @@ var RULES = [
     components: ["launch"],
     platforms: "all",
     severity: "medium",
-    check: "The launch screen is nearly identical to the first screen, so launch feels instant.",
+    check: "The launch screen is nearly identical to the app's first screen.",
     source: { slug: "launching", phrase: "nearly identical to the first screen" }
   },
   {
@@ -22922,7 +22967,7 @@ var RULES = [
     components: ["launch"],
     platforms: "all",
     severity: "low",
-    check: "The launch screen contains no text.",
+    check: "Avoid text on the launch screen.",
     source: { slug: "launching", phrase: "Avoid including text on your launch screen" }
   },
   {
@@ -22931,7 +22976,7 @@ var RULES = [
     components: ["launch"],
     platforms: "all",
     severity: "medium",
-    check: "The launch experience does not advertise or show branding splash content beyond what is necessary.",
+    check: "The launch screen does not advertise.",
     source: { slug: "launching", phrase: "Don't advertise" }
   }
 ];
@@ -23031,8 +23076,10 @@ var ColorParseError = class extends Error {
 function clamp(n, lo, hi) {
   return Math.min(hi, Math.max(lo, n));
 }
+var NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)%?$/;
 function parseColor(input) {
   const s = input.trim().toLowerCase();
+  const bad = () => new ColorParseError(`Cannot parse color "${input}". Use #RGB, #RRGGBB, #RRGGBBAA or rgb()/rgba().`);
   const hex = /^#?([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/.exec(s);
   if (hex) {
     let h = hex[1];
@@ -23041,24 +23088,18 @@ function parseColor(input) {
     return { r: n(0), g: n(2), b: n(4), a: h.length === 8 ? n(6) / 255 : 1 };
   }
   const fn = /^rgba?\(\s*(.+?)\s*\)$/.exec(s);
-  if (fn) {
-    const [rgbPart, slashAlpha] = fn[1].split("/").map((p) => p.trim());
-    const parts = rgbPart.split(/[\s,]+/).filter(Boolean);
-    if (slashAlpha !== void 0) parts.push(slashAlpha);
-    if (parts.length !== 3 && parts.length !== 4) throw new ColorParseError(`Cannot parse color "${input}"`);
-    const channel = (p) => {
-      const v = p.endsWith("%") ? parseFloat(p) / 100 * 255 : parseFloat(p);
-      if (!Number.isFinite(v)) throw new ColorParseError(`Cannot parse color "${input}"`);
-      return clamp(v, 0, 255);
-    };
-    const alpha = (p) => {
-      const v = p.endsWith("%") ? parseFloat(p) / 100 : parseFloat(p);
-      if (!Number.isFinite(v)) throw new ColorParseError(`Cannot parse color "${input}"`);
-      return clamp(v, 0, 1);
-    };
-    return { r: channel(parts[0]), g: channel(parts[1]), b: channel(parts[2]), a: parts[3] !== void 0 ? alpha(parts[3]) : 1 };
+  if (!fn) throw bad();
+  const slashParts = fn[1].split("/");
+  if (slashParts.length > 2) throw bad();
+  const parts = slashParts[0].trim().split(/\s*,\s*|\s+/).filter(Boolean);
+  if (slashParts.length === 2) {
+    if (parts.length !== 3) throw bad();
+    parts.push(slashParts[1].trim());
   }
-  throw new ColorParseError(`Cannot parse color "${input}". Use #RGB, #RRGGBB, #RRGGBBAA or rgb()/rgba().`);
+  if (parts.length !== 3 && parts.length !== 4 || !parts.every((p) => NUMBER.test(p))) throw bad();
+  const channel = (p) => clamp(p.endsWith("%") ? parseFloat(p) / 100 * 255 : parseFloat(p), 0, 255);
+  const alpha = (p) => clamp(p.endsWith("%") ? parseFloat(p) / 100 : parseFloat(p), 0, 1);
+  return { r: channel(parts[0]), g: channel(parts[1]), b: channel(parts[2]), a: parts[3] !== void 0 ? alpha(parts[3]) : 1 };
 }
 function composite(top, bottom) {
   const a = top.a;
@@ -23091,35 +23132,69 @@ function higCategory(fontSizePt, bold) {
   if (fontSizePt === void 0) return null;
   return fontSizePt >= 18 ? "large" : "regular";
 }
+var CATEGORY_RULE = { regular: "contrast.text", large: "contrast.large-text", bold: "contrast.bold-text" };
 function checkContrast(input) {
   const fg = parseColor(input.foreground);
-  const bg = parseColor(input.background);
+  let bg = parseColor(input.background);
   const notes = [];
-  const scenarios = bg.a < 1 ? [
-    { bg: composite(bg, WHITE), label: "over white" },
-    { bg: composite(bg, BLACK), label: "over black" }
-  ] : [{ bg, label: "" }];
-  if (bg.a < 1) {
-    notes.push("The background is translucent and its backdrop is unknown; it was composited over white and over black and the worse ratio is reported.");
-  }
-  if (fg.a < 1) notes.push(`The foreground alpha (${fg.a.toFixed(2)}) was composited over the background.`);
-  let worst = null;
-  for (const s of scenarios) {
-    const effFg2 = fg.a < 1 ? composite(fg, s.bg) : fg;
-    const ratio2 = contrastRatio(effFg2, s.bg);
-    if (!worst || ratio2 < worst.ratio) worst = { ratio: ratio2, fg: effFg2, bg: s.bg };
-  }
-  const { ratio, fg: effFg, bg: effBg } = worst;
   const category = higCategory(input.fontSizePt, input.bold);
   const required2 = category === null ? null : category === "regular" ? 4.5 : 3;
+  if (input.backdrop !== void 0) {
+    const backdrop = parseColor(input.backdrop);
+    if (backdrop.a < 1) throw new ColorParseError(`The backdrop must be opaque: "${input.backdrop}"`);
+    if (bg.a < 1) notes.push("The translucent background was composited over the given backdrop.");
+    bg = composite(bg, backdrop);
+  }
+  if (bg.a < 1) {
+    const scenarios = [WHITE, BLACK].map((b) => {
+      const effBg = composite(bg, b);
+      const effFg2 = fg.a < 1 ? composite(fg, effBg) : fg;
+      return { backdrop: toHex(b), effectiveBackground: toHex(effBg), ratio: Math.floor(contrastRatio(effFg2, effBg) * 100) / 100 };
+    });
+    notes.push(
+      "The background is translucent and the color behind it is unknown, so no pass/fail is given. The scenarios over white and black are illustrations, not bounds: the real ratio can be lower than both. Pass backdrop (an opaque color) to get a verdict."
+    );
+    return {
+      foreground: input.foreground,
+      background: input.background,
+      compliance: "unknown",
+      effectiveForeground: null,
+      effectiveBackground: null,
+      ratio: null,
+      ratioExact: null,
+      scenarios,
+      notes,
+      wcag: { aaNormalText: null, aaLargeText: null, aaaNormalText: null, aaaLargeText: null },
+      hig: {
+        accessibilityTable: {
+          category,
+          ruleId: category ? CATEGORY_RULE[category] : null,
+          requiredRatio: required2,
+          pass: null,
+          regularTextPass: null,
+          largeOrBoldTextPass: null
+        },
+        darkModeMinimum: { ruleId: "contrast.all-appearances", requiredRatio: 4.5, pass: null },
+        darkModePreferred: { ruleId: "contrast.preferred", targetRatio: 7, meets: null }
+      }
+    };
+  }
+  const effFg = fg.a < 1 ? composite(fg, bg) : fg;
+  if (fg.a < 1) notes.push(`The foreground alpha (${fg.a.toFixed(2)}) was composited over the background.`);
+  const ratio = contrastRatio(effFg, bg);
   if (input.fontSizePt !== void 0 && input.fontSizePt > 17 && input.fontSizePt < 18 && !input.bold) {
     notes.push('The HIG table lists "Up to 17 pts" and "18 pts"; sizes in between are treated as regular text (4.5:1).');
+  }
+  if (category === "bold" && ratio < 4.5 && ratio >= 3) {
+    notes.push("Passes the Accessibility table's bold-text row (3:1) but not the Dark Mode page's general 4.5:1 minimum; both are reported separately.");
   }
   return {
     foreground: input.foreground,
     background: input.background,
+    ...input.backdrop !== void 0 ? { backdrop: input.backdrop } : {},
+    compliance: "known",
     effectiveForeground: toHex(effFg),
-    effectiveBackground: toHex(effBg),
+    effectiveBackground: toHex(bg),
     ratio: Math.floor(ratio * 100) / 100,
     ratioExact: ratio,
     notes,
@@ -23130,12 +23205,16 @@ function checkContrast(input) {
       aaaLargeText: ratio >= 4.5
     },
     hig: {
-      category,
-      requiredRatio: required2,
-      pass: required2 === null ? null : ratio >= required2,
-      regularTextPass: ratio >= 4.5,
-      largeOrBoldTextPass: ratio >= 3,
-      preferred7to1: ratio >= 7
+      accessibilityTable: {
+        category,
+        ruleId: category ? CATEGORY_RULE[category] : null,
+        requiredRatio: required2,
+        pass: required2 === null ? null : ratio >= required2,
+        regularTextPass: ratio >= 4.5,
+        largeOrBoldTextPass: ratio >= 3
+      },
+      darkModeMinimum: { ruleId: "contrast.all-appearances", requiredRatio: 4.5, pass: ratio >= 4.5 },
+      darkModePreferred: { ruleId: "contrast.preferred", targetRatio: 7, meets: ratio >= 7 }
     }
   };
 }
@@ -23151,6 +23230,25 @@ function maskSwift(src) {
   const n = src.length;
   const blank = (from, to, ch) => {
     for (let k = from; k < to && k < n; k++) if (out[k] !== "\n" && out[k] !== "\r") out[k] = ch;
+  };
+  const skipComment = (i2) => {
+    if (src[i2 + 1] === "/") {
+      let j2 = i2;
+      while (j2 < n && src[j2] !== "\n") j2++;
+      return j2;
+    }
+    let depth = 1;
+    let j = i2 + 2;
+    while (j < n && depth > 0) {
+      if (src[j] === "/" && src[j + 1] === "*") {
+        depth++;
+        j += 2;
+      } else if (src[j] === "*" && src[j + 1] === "/") {
+        depth--;
+        j += 2;
+      } else j++;
+    }
+    return j;
   };
   const scanString = (i2) => {
     let hashes = 0;
@@ -23170,6 +23268,10 @@ function maskSwift(src) {
           let depth = 1;
           let k = after + 1;
           while (k < n && depth > 0) {
+            if (src[k] === "/" && (src[k + 1] === "/" || src[k + 1] === "*")) {
+              k = skipComment(k);
+              continue;
+            }
             if (src[k] === '"' || src[k] === "#" && /^#+"/.test(src.slice(k, k + 8))) {
               k = scanString(k);
               continue;
@@ -23194,23 +23296,8 @@ function maskSwift(src) {
   let i = 0;
   while (i < n) {
     const c = src[i];
-    if (c === "/" && src[i + 1] === "/") {
-      let j = i;
-      while (j < n && src[j] !== "\n") j++;
-      blank(i, j, " ");
-      i = j;
-    } else if (c === "/" && src[i + 1] === "*") {
-      let depth = 1;
-      let j = i + 2;
-      while (j < n && depth > 0) {
-        if (src[j] === "/" && src[j + 1] === "*") {
-          depth++;
-          j += 2;
-        } else if (src[j] === "*" && src[j + 1] === "/") {
-          depth--;
-          j += 2;
-        } else j++;
-      }
+    if (c === "/" && (src[i + 1] === "/" || src[i + 1] === "*")) {
+      const j = skipComment(i);
       blank(i, j, " ");
       i = j;
     } else if (c === '"' || c === "#" && /^#+"/.test(src.slice(i, i + 8))) {
@@ -23271,6 +23358,56 @@ function matchBackward(m, close) {
   }
   return -1;
 }
+var OS_NAMES = {
+  ios: ["iOS"],
+  ipados: ["iOS"],
+  // iPadOS apps compile with os(iOS)
+  macos: ["macOS", "OSX"],
+  tvos: ["tvOS"],
+  watchos: ["watchOS"],
+  visionos: ["visionOS", "xrOS"]
+};
+function evalOsCondition(cond, platform) {
+  const active = OS_NAMES[platform] ?? [];
+  const expr = cond.replace(/os\s*\(\s*(\w+)\s*\)/g, (_, name) => active.includes(name) ? "T" : "F");
+  if (!/^[TF!&|()\s]+$/.test(expr) || !/[TF]/.test(expr)) return null;
+  const js = expr.replace(/T/g, "true").replace(/F/g, "false");
+  try {
+    return Boolean(new Function(`return (${js});`)());
+  } catch {
+    return null;
+  }
+}
+function maskInactivePlatforms(masked, platform) {
+  const lines = masked.split("\n");
+  const stack = [];
+  const out = lines.map((line2) => {
+    const d = /^\s*#(if|elseif|else|endif)\b(.*)$/.exec(line2);
+    if (d) {
+      const [, kind, rest] = d;
+      if (kind === "if") {
+        const v = evalOsCondition(rest.trim(), platform);
+        stack.push({ cur: v, taken: v });
+      } else if (kind === "elseif" && stack.length) {
+        const f = stack[stack.length - 1];
+        const v = evalOsCondition(rest.trim(), platform);
+        if (f.taken === true) f.cur = false;
+        else if (f.taken === false) {
+          f.cur = v;
+          f.taken = v;
+        } else f.cur = v === false ? false : null;
+      } else if (kind === "else" && stack.length) {
+        const f = stack[stack.length - 1];
+        f.cur = f.taken === true ? false : f.taken === false ? true : null;
+      } else if (kind === "endif") {
+        stack.pop();
+      }
+      return line2;
+    }
+    return stack.some((f) => f.cur === false) ? line2.replace(/[^\s]/g, " ") : line2;
+  });
+  return out.join("\n");
+}
 
 // src/swift/syntax.ts
 var ID = /[A-Za-z0-9_]/;
@@ -23293,7 +23430,7 @@ function parseCall(m, name, start, afterName) {
   }
   const closures = [];
   let end = args ? j : afterName;
-  let k = skipSpace(m, j, false);
+  let k = skipSpace(m, j);
   if (m[k] === "{") {
     const close = matchForward(m, k);
     if (close > 0) {
@@ -23339,7 +23476,7 @@ function headOf(m, dot) {
       if (open < 0) return lastId;
       i = open - 1;
       if (c === "}") {
-        const p2 = skipSpaceBack(m, i, false);
+        const p2 = skipSpaceBack(m, i);
         if (m[p2] === ":") {
           i = p2 - 1;
           const q = skipSpaceBack(m, i);
@@ -23375,7 +23512,7 @@ function headOf(m, dot) {
   }
   return lastId;
 }
-function enclosingCallName(m, offset) {
+function enclosingCall(m, offset) {
   let depth = 0;
   for (let i = offset - 1; i >= 0; i--) {
     const c = m[i];
@@ -23385,10 +23522,10 @@ function enclosingCallName(m, offset) {
         depth--;
         continue;
       }
-      let p = skipSpaceBack(m, i - 1, false);
+      let p = skipSpaceBack(m, i - 1);
       if (c === "{" && m[p] === ")") {
         const open = matchBackward(m, p);
-        if (open < 0) return null;
+        if (open < 0) return { name: null, open: i };
         p = skipSpaceBack(m, open - 1, false);
       }
       if (c === "{" && m[p] === ":") {
@@ -23396,10 +23533,111 @@ function enclosingCallName(m, offset) {
       }
       let s = p;
       while (s >= 0 && ID.test(m[s])) s--;
-      return p >= 0 && s < p ? m.slice(s + 1, p + 1) : null;
+      return { name: p >= 0 && s < p ? m.slice(s + 1, p + 1) : null, open: i };
     }
   }
   return null;
+}
+function enclosingCallName(m, offset) {
+  return enclosingCall(m, offset)?.name ?? null;
+}
+function enclosingCallNames(m, offset, levels = 4) {
+  const out = [];
+  let at = offset;
+  for (let k = 0; k < levels; k++) {
+    const call = enclosingCall(m, at);
+    if (!call) break;
+    if (call.name) out.push(call.name);
+    at = call.open;
+  }
+  return out;
+}
+function countBranchAware(text, pattern) {
+  if (/\b(ForEach|switch)\b/.test(text)) return null;
+  const re = new RegExp(pattern.source, "g");
+  let total = 0;
+  let plainFrom = 0;
+  let depth = 0;
+  const countPlain = (a, b) => (text.slice(a, b).match(re) ?? []).length;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === "(" || c === "{" || c === "[") depth++;
+    else if (c === ")" || c === "}" || c === "]") depth--;
+    if (depth !== 0 || !/^if\b/.test(text.slice(i, i + 3)) || i > 0 && /[\w#.]/.test(text[i - 1])) continue;
+    total += countPlain(plainFrom, i);
+    const branches = [];
+    let j = i;
+    for (; ; ) {
+      const open = text.indexOf("{", j);
+      const close = open >= 0 ? matchForward(text, open) : -1;
+      if (close < 0) return null;
+      const inner = countBranchAware(text.slice(open + 1, close), pattern);
+      if (inner === null) return null;
+      branches.push(inner);
+      j = close + 1;
+      const k = skipSpace(text, j);
+      if (!/^else\b/.test(text.slice(k, k + 5))) break;
+      const k2 = skipSpace(text, k + 4);
+      if (/^if\b/.test(text.slice(k2, k2 + 3))) {
+        j = k2;
+        continue;
+      }
+      if (text[k2] !== "{") return null;
+      const c2 = matchForward(text, k2);
+      if (c2 < 0) return null;
+      const inner2 = countBranchAware(text.slice(k2 + 1, c2), pattern);
+      if (inner2 === null) return null;
+      branches.push(inner2);
+      j = c2 + 1;
+      break;
+    }
+    total += Math.max(...branches);
+    plainFrom = j;
+    i = j - 1;
+  }
+  return total + countPlain(plainFrom, text.length);
+}
+function boundsFromChain(m, mods) {
+  let idx = -1;
+  for (let k = mods.length - 1; k >= 0; k--) {
+    if (mods[k].name === "frame") {
+      idx = k;
+      break;
+    }
+  }
+  if (idx < 0) return null;
+  const size = frameSize(slice(m, mods[idx].args));
+  if (size.flexible || size.width === void 0 && size.height === void 0) return null;
+  let { width, height } = size;
+  let resolved = true;
+  let note;
+  for (const mod of mods.slice(idx + 1)) {
+    if (mod.name !== "padding") continue;
+    const args = slice(m, mod.args).trim();
+    const amount = /(?:^|,)\s*(\d+(?:\.\d+)?)\s*$/.exec(args);
+    const edges = /^\.(all|horizontal|vertical|leading|trailing|top|bottom)\b/.exec(args)?.[1] ?? (amount && /^\d/.test(args) ? "all" : null);
+    if (!amount || !edges) {
+      resolved = false;
+      note = `.padding(${args}) adds an amount that can't be read statically`;
+      continue;
+    }
+    const n = parseFloat(amount[1]);
+    const w = edges === "all" || edges === "horizontal" ? 2 * n : edges === "leading" || edges === "trailing" ? n : 0;
+    const h = edges === "all" || edges === "vertical" ? 2 * n : edges === "top" || edges === "bottom" ? n : 0;
+    if (width !== void 0) width += w;
+    if (height !== void 0) height += h;
+  }
+  return { width, height, resolved, note };
+}
+function rootExpression(m, body) {
+  const start = skipSpace(m, body[0]);
+  const id = /^[A-Za-z_]\w*/.exec(m.slice(start, start + 80));
+  if (!id || start >= body[1]) return null;
+  const call = parseCall(m, id[0], start, start + id[0].length);
+  const mods = modifierChain(m, call.end);
+  const end = mods.length ? mods[mods.length - 1].end : call.end;
+  if (end > body[1] || m.slice(end, body[1]).trim() !== "") return null;
+  return { head: id[0], mods };
 }
 function findAll(m, pattern) {
   const re = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : pattern.flags + "g");
@@ -23425,8 +23663,8 @@ var HEURISTICS = [
   {
     id: "hit-target-size",
     ruleIds: ["controls.size.<platform>"],
-    description: "Button, Link, Toggle, Menu or onTapGesture view with a literal .frame smaller than the platform's default (medium) or minimum (high) control size.",
-    falsePositives: "Hit area enlarged elsewhere (contentShape on a padded parent, a custom ButtonStyle); frames on decorative images are ignored."
+    description: "Button, Link, Toggle, Menu or onTapGesture view whose bounds are readable: a literal .frame on the control, or on the label's single root view plus literal padding. Below the platform minimum is high, below the default is medium; non-literal padding makes it a low-severity advisory. Frames on nested views are not used.",
+    falsePositives: "Hit area enlarged by a custom ButtonStyle or a parent view; decorative images are never checked."
   },
   {
     id: "fixed-font-size",
@@ -23449,8 +23687,8 @@ var HEURISTICS = [
   {
     id: "icon-only-button-label",
     ruleIds: ["a11y.labels"],
-    description: "Button whose label is only an Image, with no Text/Label and no .accessibilityLabel.",
-    falsePositives: "Some SF Symbols provide a default VoiceOver description; labels set by a custom ButtonStyle or a wrapper view."
+    description: "Advisory (low severity): Button whose label is only an Image, with no Text/Label and no local .accessibilityLabel \u2014 a possible missing descriptive label to confirm with VoiceOver.",
+    falsePositives: "SF Symbols provide default VoiceOver descriptions; labels set by a custom ButtonStyle or a wrapper view."
   },
   {
     id: "tap-gesture-as-button",
@@ -23473,13 +23711,13 @@ var HEURISTICS = [
   {
     id: "alert-button-count",
     ruleIds: ["alert.max-buttons", "actionsheet.max-buttons.watchos"],
-    description: ".alert actions with more than three Buttons; on watchOS, .confirmationDialog with more than four including Cancel.",
-    falsePositives: "Buttons inside conditionals that never all show at once."
+    description: ".alert actions with more than three Buttons shown at once (if/else branches count as alternatives; ForEach/switch skip the check); on watchOS, .confirmationDialog with more than four including Cancel.",
+    falsePositives: "Conditions that are never true together across separate if statements."
   },
   {
     id: "segmented-count",
     ruleIds: ["segmented.count"],
-    description: "Picker with .segmented style and more literal .tag() options than the HIG suggests (5 on iPhone, 7 in wide layouts).",
+    description: "Picker with .segmented style and more literal .tag() options than the HIG suggests (5 on iPhone, 7 in wide layouts); if/else branches count as alternatives, ForEach/switch skip the check.",
     falsePositives: 'iPad-only or Mac layouts reviewed with platform "ios"; pass the right platform.'
   },
   {
@@ -23510,54 +23748,58 @@ function checkHitTargets(ctx) {
   const rule = ruleFor("controls.size", ctx.platform);
   if (!rule?.data) return;
   const { defaultPt, minimumPt } = rule.data;
-  const judge = (w, h, from, to, what, confidence) => {
-    const dims = [w, h].filter((v) => v !== void 0);
+  const judge = (b, from, to, what) => {
+    const dims = [b.width, b.height].filter((v) => v !== void 0);
     if (!dims.length) return;
     const smallest = Math.min(...dims);
     if (smallest >= defaultPt) return;
-    const size = `${w ?? "?"}x${h ?? "?"} pt`;
+    const size = `${b.width ?? "?"}x${b.height ?? "?"} pt`;
+    if (!b.resolved) {
+      add(ctx, {
+        check: "hit-target-size",
+        ruleId: rule.id,
+        severity: "low",
+        confidence: "low",
+        from,
+        to,
+        message: `Advisory: ${what} has a ${size} frame, but ${b.note ?? "later modifiers change its size"}, so its hit area couldn't be determined. Confirm it reaches the ${defaultPt}x${defaultPt} pt default (${minimumPt}x${minimumPt} pt minimum) for ${ctx.platform}.`
+      });
+      return;
+    }
     const below = smallest < minimumPt;
     add(ctx, {
       check: "hit-target-size",
       ruleId: rule.id,
       severity: below ? "high" : "medium",
-      confidence,
+      confidence: "medium",
       from,
       to,
-      message: `${what} has a ${size} frame, ${below ? `below the ${minimumPt}x${minimumPt} pt minimum` : `under the ${defaultPt}x${defaultPt} pt default`} control size for ${ctx.platform}. Enlarge the frame or the tappable area (padding plus .contentShape).`
+      message: `${what} is ${size}, ${below ? `below the ${minimumPt}x${minimumPt} pt minimum` : `under the ${defaultPt}x${defaultPt} pt default`} control size for ${ctx.platform}. Enlarge the frame, or add padding inside the tappable area.`
     });
   };
   for (const { call, chain } of callsNamed(ctx.m, TAPPABLE)) {
-    const frames = chain.filter((x) => x.name === "frame");
-    const lastFrame = frames[frames.length - 1];
-    if (lastFrame) {
-      const size = frameSize(slice(ctx.m, lastFrame.args));
-      if (size.flexible) continue;
-      const after = chain.slice(chain.indexOf(lastFrame) + 1);
-      const padded = after.some((x) => x.name === "padding");
-      judge(size.width, size.height, call.start, lastFrame.end, `${call.name}`, padded ? "low" : "medium");
+    const own = boundsFromChain(ctx.m, chain.filter((x) => x.name === "frame"));
+    if (own) {
+      const lastFrame = [...chain].reverse().find((x) => x.name === "frame");
+      judge(own, call.start, lastFrame.end, call.name);
       continue;
     }
-    const labelText = [slice(ctx.m, call.args), ...call.closures.map((c) => slice(ctx.m, c.body))].join("\n");
-    if (/\.padding\b|\.contentShape\b|\b(min|max)(Width|Height)\s*:/.test(labelText)) continue;
-    const sizes = findAll(labelText, /\.frame\s*\(([^()]*)\)/).map((x) => frameSize(x[1]));
-    if (!sizes.length) continue;
-    const w = Math.max(...sizes.map((s) => s.width ?? 0));
-    const h = Math.max(...sizes.map((s) => s.height ?? 0));
-    judge(w || void 0, h || void 0, call.start, call.end, `${call.name} label`, "low");
+    if (chain.some((x) => x.name === "frame")) continue;
+    const label = call.closures.find((c) => c.label === "label") ?? (call.closures.length >= 2 ? call.closures[1] : call.closures.length === 1 && /\baction\s*:/.test(slice(ctx.m, call.args)) ? call.closures[0] : void 0);
+    if (!label) continue;
+    const root = rootExpression(ctx.m, label.body);
+    const bounds = root ? boundsFromChain(ctx.m, root.mods) : null;
+    if (bounds) {
+      judge(bounds, call.start, call.end, `${call.name} label (${root.head})`);
+    }
   }
   for (const x of findAll(ctx.m, /\.onTapGesture\b/)) {
     const head = headOf(ctx.m, x.index);
     if (!head) continue;
     const before = modifierChain(ctx.m, chainHeadEnd(ctx.m, head)).filter((mod) => mod.start < x.index);
-    const frames = before.filter((mod) => mod.name === "frame");
-    const lastFrame = frames[frames.length - 1];
-    if (!lastFrame) continue;
-    const size = frameSize(slice(ctx.m, lastFrame.args));
-    if (size.flexible) continue;
-    const padded = before.slice(before.indexOf(lastFrame) + 1).some((mod) => mod.name === "padding");
-    if (padded) continue;
-    judge(size.width, size.height, head.start, x.index + 13, `Tappable ${head.name}`, "medium");
+    const bounds = boundsFromChain(ctx.m, before);
+    if (!bounds) continue;
+    judge(bounds, head.start, x.index + 13, `Tappable ${head.name}`);
   }
 }
 function chainHeadEnd(m, head) {
@@ -23622,6 +23864,7 @@ function checkFonts(ctx) {
     const line2 = ctx.m.slice(lineStart, lineEnd < 0 ? void 0 : lineEnd);
     tooSmall(x[1].trim(), x.index, x.index + x[0].length);
     if (!dynamicTypeApplies || /UIFontMetrics|adjustsFontForContentSizeCategory/.test(line2)) continue;
+    if (enclosingCallNames(ctx.m, x.index).includes("scaledFont")) continue;
     add(ctx, {
       check: "fixed-font-size",
       ruleId: "type.dynamic-type",
@@ -23705,11 +23948,11 @@ function checkIconButtons(ctx) {
     add(ctx, {
       check: "icon-only-button-label",
       ruleId: "a11y.labels",
-      severity: "high",
-      confidence: "medium",
+      severity: "low",
+      confidence: "low",
       from: call.start,
       to: call.end,
-      message: 'Icon-only Button without an accessibility label. Add .accessibilityLabel("\u2026"), or use Label("\u2026", systemImage:) with .labelStyle(.iconOnly) so VoiceOver reads a meaningful name.'
+      message: 'Possible missing descriptive label (advisory): this Button shows only an image and has no local .accessibilityLabel or text. SF Symbols carry default descriptions and a style or wrapper may add a label, so confirm with VoiceOver or Accessibility Inspector. If the name is missing or generic, add .accessibilityLabel("\u2026") or use Label("\u2026", systemImage:) with .labelStyle(.iconOnly).'
     });
   }
 }
@@ -23793,9 +24036,9 @@ function checkScreenBounds(ctx) {
   }
 }
 function countButtons(text) {
-  if (/\bForEach\b/.test(text)) return null;
-  return findAll(text, /(?<![.\w])Button\s*[({]/).length;
+  return countBranchAware(text, /(?<![.\w])Button\s*[({]/);
 }
+var hasBranches = (text) => /(?<![\w#.])if\b/.test(text);
 function checkAlerts(ctx) {
   for (const x of findAll(ctx.m, /\.alert\s*\(/)) {
     const call = parseCall(ctx.m, "alert", x.index, x.index + 6);
@@ -23814,7 +24057,7 @@ function checkAlerts(ctx) {
       check: "alert-button-count",
       ruleId: "alert.max-buttons",
       severity: "medium",
-      confidence: "high",
+      confidence: hasBranches(text) ? "medium" : "high",
       from: x.index,
       to: call.end,
       message: `This alert has ${n} buttons; alerts hold up to three. Offer more choices in an action sheet (.confirmationDialog) or a dedicated view.`
@@ -23850,14 +24093,13 @@ function checkSegmented(ctx) {
     const content = call.closures.find((c) => c.label === null || c.label === "content");
     if (!content) continue;
     const body = slice(ctx.m, content.body);
-    if (/\bForEach\b/.test(body)) continue;
-    const n = findAll(body, /\.tag\s*\(/).length;
-    if (n <= limit) continue;
+    const n = countBranchAware(body, /\.tag\s*\(/);
+    if (n === null || n <= limit) continue;
     add(ctx, {
       check: "segmented-count",
       ruleId: "segmented.count",
       severity: "medium",
-      confidence: "high",
+      confidence: hasBranches(body) ? "medium" : "high",
       from: call.start,
       to: style.end,
       message: `Segmented picker with ${n} segments; aim for at most ${limit} ${ctx.platform === "ios" ? "on iPhone" : "in a wide layout"}. Consider a menu-style Picker or a list.`
@@ -23865,7 +24107,7 @@ function checkSegmented(ctx) {
   }
 }
 function runHeuristics(src, platform) {
-  const ctx = { src, m: src.masked, platform, out: [] };
+  const ctx = { src, m: maskInactivePlatforms(src.masked, platform), platform, out: [] };
   checkHitTargets(ctx);
   checkFonts(ctx);
   checkColors(ctx);
@@ -23971,19 +24213,23 @@ var TOOLS = [
       properties: {
         code: { type: "string", description: "Swift source to review" },
         path: { type: "string", description: "Absolute path to a .swift file (relative paths resolve against the server process working directory)" },
-        platform: { ...platformProp, description: "Platform whose thresholds apply (default ios)" }
+        platform: { ...platformProp, description: "Platform whose thresholds apply. Pass it explicitly; it defaults to ios, whose thresholds differ from macOS, tvOS, visionOS and watchOS." }
       },
       required: []
     }
   },
   {
     name: "check_contrast",
-    description: "Deterministic WCAG 2.x contrast ratio between two colors (#RGB, #RRGGBB, #RRGGBBAA or rgb()/rgba(); a translucent foreground is composited over the background). Reports WCAG AA/AAA results and the HIG's own thresholds (4.5:1 for text up to 17 pt, 3:1 for 18 pt and larger or bold text), with live citations.",
+    description: "Deterministic WCAG 2.x contrast ratio between two colors (#RGB, #RRGGBB, #RRGGBBAA or rgb()/rgba(); a translucent foreground is composited over the background; a translucent background needs an opaque backdrop for a verdict). Reports WCAG AA/AAA results and, separately, the HIG Accessibility table (4.5:1 for non-bold text up to 17 pt, 3:1 for 18 pt and larger or bold text) and the Dark Mode guidance (4.5:1 minimum, 7:1 preferred), with live citations.",
     inputSchema: {
       type: "object",
       properties: {
         foreground: { type: "string", description: 'Text or icon color, e.g. "#8E8E93"' },
         background: { type: "string", description: 'Background color, e.g. "#FFFFFF"' },
+        backdrop: {
+          type: "string",
+          description: "Opaque color behind a translucent background. Without it, a translucent background gets no pass/fail."
+        },
         fontSizePt: { type: "number", description: "Text size in points, to pick the applicable HIG threshold" },
         bold: { type: "boolean", description: "Whether the text is bold" }
       },
@@ -24059,7 +24305,7 @@ var HIGReviewServer = class {
     this.setupHandlers();
   }
   citer() {
-    return new Citer((slug) => this.client.getDoc(slug));
+    return new Citer((slug) => this.client.getDocInfo(slug));
   }
   setupHandlers() {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
@@ -24119,8 +24365,12 @@ var HIGReviewServer = class {
   async contrast(p) {
     const result = checkContrast(p);
     const citer = this.citer();
-    const ids = result.hig.category === null ? ["contrast.text", "contrast.large-text", "contrast.bold-text"] : result.hig.category === "regular" ? ["contrast.text"] : result.hig.category === "large" ? ["contrast.large-text"] : ["contrast.bold-text"];
-    ids.push("contrast.all-appearances");
+    const table = result.hig.accessibilityTable.ruleId;
+    const ids = [
+      ...table ? [table] : ["contrast.text", "contrast.large-text", "contrast.bold-text"],
+      "contrast.all-appearances",
+      "contrast.preferred"
+    ];
     const citations = [];
     for (const id of ids) {
       const rule = ruleById(id);
@@ -24128,7 +24378,7 @@ var HIGReviewServer = class {
     }
     return {
       ...result,
-      definitions: 'WCAG "large text" is 18 pt, or 14 pt bold. The HIG table (used by Accessibility Inspector) applies 3:1 to text of 18 pt and larger, and to bold text of any size. The Dark Mode page asks for at least 4.5:1 in every appearance and suggests striving for 7:1 with custom colors, especially for small text. Check light and dark color pairs separately.',
+      definitions: 'WCAG "large text" is 18 pt, or 14 pt bold. The HIG Accessibility table (used by Accessibility Inspector) is separate: 4.5:1 for non-bold text up to 17 pt, 3:1 for 18 pt and larger, and 3:1 for bold text of any size. The Dark Mode page separately asks for no lower than 4.5:1 in every appearance and to strive for 7:1 with custom colors; those are reported as darkModeMinimum and darkModePreferred. Check light and dark color pairs separately.',
       citations
     };
   }

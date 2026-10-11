@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { maskSwift, toSource, lineAt } from '../src/swift/lexer.js';
+import { evalOsCondition, maskSwift, toSource, lineAt } from '../src/swift/lexer.js';
 import { HEURISTICS, runHeuristics } from '../src/swift/heuristics.js';
-import { headOf } from '../src/swift/syntax.js';
+import { countBranchAware, headOf } from '../src/swift/syntax.js';
 import { loadSwift, reviewSwiftUI } from '../src/swift/review.js';
 import { Citer } from '../src/rules/citation.js';
 import { ruleById } from '../src/rules/registry.js';
@@ -109,6 +109,57 @@ describe('SwiftUI heuristics: positive and negative fixtures', () => {
     expect(checks(code, 'ios')).toEqual([]);
   });
 
+  it('hit targets: unresolved padding is a low-severity advisory, literal padding counts (should-fix 6)', () => {
+    const advisory = runHeuristics(
+      toSource('Button { go() } label: {\n  Image(systemName: "plus")\n    .frame(width: 20, height: 20)\n    .padding()\n}'),
+      'ios'
+    ).find((f) => f.check === 'hit-target-size')!;
+    expect(advisory).toMatchObject({ severity: 'low', confidence: 'low' });
+    expect(advisory.message).toMatch(/^Advisory/);
+    const padded = runHeuristics(toSource('Button { go() } label: {\n  Image(systemName: "plus")\n    .frame(width: 20, height: 20)\n    .padding(1)\n}'), 'ios').find((f) => f.check === 'hit-target-size')!;
+    expect(padded.severity).toBe('high');
+    expect(padded.message).toMatch(/22x22 pt/);
+    // Padding outside the Button itself is not tappable and is not counted.
+    const outside = runHeuristics(toSource('Button("Go") { go() }.frame(width: 24, height: 24).padding(20)'), 'ios')[0];
+    expect(outside.severity).toBe('high');
+  });
+
+  it('reports icon-only buttons as a low-severity possible missing label (should-fix 7)', () => {
+    const [f] = runHeuristics(toSource('Button { delete() } label: { Image(systemName: "trash") }'), 'ios');
+    expect(f).toMatchObject({ check: 'icon-only-button-label', severity: 'low', confidence: 'low' });
+    expect(f.message).toMatch(/^Possible missing descriptive label/);
+  });
+
+  it('skips code in #if os(...) branches that do not apply (should-fix 8)', () => {
+    const code = '#if os(iOS)\nText("a").font(.system(size: 9))\n#elseif os(macOS)\nText("b").font(.system(size: 8))\n#else\nText("c").font(.system(size: 7))\n#endif';
+    const sizes = (p: Parameters<typeof runHeuristics>[1]) =>
+      runHeuristics(toSource(code), p)
+        .filter((f) => f.check === 'font-below-minimum')
+        .map((f) => f.lines[0]);
+    expect(sizes('ios')).toEqual([2]);
+    expect(sizes('macos')).toEqual([4]);
+    expect(sizes('watchos')).toEqual([6]);
+    // Non-platform conditions keep every branch.
+    expect(checks('#if DEBUG\nText("a").font(.system(size: 9))\n#endif')).toContain('font-below-minimum');
+    expect(evalOsCondition('os(iOS) || os(visionOS)', 'visionos')).toBe(true);
+    expect(evalOsCondition('!os(macOS)', 'macos')).toBe(false);
+    expect(evalOsCondition('canImport(UIKit)', 'ios')).toBeNull();
+  });
+
+  it('counts if/else branches as alternatives (should-fix 8)', () => {
+    expect(countBranchAware('Button("a"){} if x { Button("b"){} Button("c"){} } else { Button("d"){} }', /Button\s*[({]/)).toBe(3);
+    expect(countBranchAware('if a { Button("x"){} } else if b { Button("y"){}; Button("z"){} } else { }', /Button\s*[({]/)).toBe(2);
+    expect(countBranchAware('switch s { case .a: Button("x"){} default: EmptyView() }', /Button\s*[({]/)).toBeNull();
+  });
+
+  it('keeps code after an interpolation containing a comment visible (should-fix 10)', () => {
+    const code = 'let s = "\\(foo /* " ) */ + bar)"\nText("a").font(.system(size: 9))';
+    const m = maskSwift(code);
+    expect(m).toContain('.font(.system(size: 9))');
+    expect(checks(code)).toContain('font-below-minimum');
+    expect(maskSwift('let t = "\\(a // ) "\n)" ; Text("x")')).toContain('Text("x")');
+  });
+
   it('reports correct line numbers and snippets', () => {
     const code = 'struct V: View {\n  var body: some View {\n    Text("a")\n      .font(.system(size: 30))\n  }\n}';
     const [f] = runHeuristics(toSource(code), 'ios');
@@ -119,7 +170,7 @@ describe('SwiftUI heuristics: positive and negative fixtures', () => {
 
 describe('review_swiftui', () => {
   const page = syntheticPage();
-  const citer = () => new Citer(async () => page);
+  const citer = () => new Citer(async () => ({ doc: page, fetchedAt: 0, stale: false }));
 
   it('attaches citations, kind and a misfire note', async () => {
     const review = await reviewSwiftUI({ code: 'Text("a").font(.system(size: 30))' }, 'ios', citer());

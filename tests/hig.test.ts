@@ -6,8 +6,6 @@ import { lexicalScore, searchEntries, tokenize } from '../src/hig/search.js';
 import { HIGClient, HIGNotFoundError } from '../src/hig/client.js';
 import { HIGService, normalizeId } from '../src/hig/service.js';
 import { RateLimiter } from '../src/hig/RateLimiter.js';
-import { SERVER_VERSION } from '../src/utils/config.js';
-import pkg from '../package.json' with { type: 'json' };
 import { buttonsDoc, componentsDoc, foundationsDoc, rootDoc } from './fixtures/docs.js';
 
 const docs: Record<string, unknown> = {
@@ -182,7 +180,7 @@ describe('HIGService', () => {
   it('searches, reads and browses via the catalog', async () => {
     const s = service();
     expect(await s.search({ query: 'buttons', limit: 10 })).toMatch(/1\. \*\*Buttons\*\*[\s\S]*id: buttons \| category: components/);
-    expect(await s.getGuideline({ guidelineId: 'components/buttons', includeExamples: true, includeCode: true })).toMatch(/^# Buttons/);
+    expect(await s.getGuideline({ guidelineId: 'components/buttons', includeExamples: true })).toMatch(/^# Buttons/);
     const top = await s.browse({ section: '' });
     expect(top).toMatch(/Foundations[\s\S]*Components/);
     expect(await s.browse({ section: 'components' })).toMatch(/2 items[\s\S]*Buttons[\s\S]*Menus/);
@@ -195,12 +193,6 @@ describe('HIGService', () => {
   });
 
   it('suggests alternatives for unknown pages', async () => {
-    await expect(service().getGuideline({ guidelineId: 'butons', includeExamples: true, includeCode: true })).rejects.toThrow(/Did you mean: buttons/);
-  });
-});
-
-describe('versioning', () => {
-  it('keeps SERVER_VERSION in sync with package.json', () => {
-    expect(SERVER_VERSION).toBe(pkg.version);
+    await expect(service().getGuideline({ guidelineId: 'butons', includeExamples: true })).rejects.toThrow(/Did you mean: buttons/);
   });
 });

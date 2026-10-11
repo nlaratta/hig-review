@@ -1,0 +1,12 @@
+{
+  "name": "hig-review",
+  "description": "HIG Review: review Apple-platform UI against the Human Interface Guidelines from Claude.",
+  "owner": { "name": "Noah Laratta", "url": "https://noahlaratta.com" },
+  "plugins": [
+    {
+      "name": "hig-review",
+      "source": "./",
+      "description": "Cited HIG checklists, SwiftUI heuristics and contrast checks for reviewing Apple-platform UI."
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "hig-review",
+  "displayName": "HIG Review",
+  "version": "0.3.0",
+  "description": "Review Apple-platform UI against the Human Interface Guidelines: cited checklists, SwiftUI heuristics and contrast checks.",
+  "author": { "name": "Noah Laratta", "url": "https://noahlaratta.com" },
+  "homepage": "https://github.com/nlaratta/hig-review",
+  "repository": "https://github.com/nlaratta/hig-review",
+  "license": "MIT",
+  "keywords": ["apple", "hig", "human-interface-guidelines", "swiftui", "design-review", "accessibility"],
+  "mcpServers": {
+    "hig-review": { "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/plugin/server.mjs"] }
+  }
+}

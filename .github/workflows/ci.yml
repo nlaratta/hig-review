@@ -18,3 +18,22 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - name: Bundle is up to date
+        run: |
+          npm run bundle
+          git diff --exit-code -- plugin/server.mjs plugin/THIRD_PARTY_LICENSES.txt || {
+            echo "::error::plugin/server.mjs is stale. Run 'npm run bundle' and commit the result."
+            exit 1
+          }
+      - name: Plugin and marketplace files
+        run: npm run validate:plugin
+      - name: Bundled server starts without node_modules
+        run: |
+          dir="$(mktemp -d)"
+          cp plugin/server.mjs "$dir/"
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | (cd "$dir" && timeout 20 node server.mjs) > "$dir/out.jsonl" || true
+          grep -q '"hig_checklist"' "$dir/out.jsonl" || { cat "$dir/out.jsonl"; exit 1; }

@@ -220,7 +220,10 @@ describe('check_contrast', () => {
 });
 
 describe('versioning', () => {
-  it('keeps package.json and config versions in sync', () => {
+  it('keeps package.json, config and plugin manifest versions in sync', () => {
+    const plugin = JSON.parse(fs.readFileSync(new URL('../.claude-plugin/plugin.json', import.meta.url), 'utf8'));
     expect(SERVER_VERSION).toBe(pkg.version);
+    expect(plugin.version).toBe(pkg.version);
+    expect(plugin.name).toBe(pkg.name);
   });
 });

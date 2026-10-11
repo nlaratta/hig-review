@@ -54,7 +54,7 @@ export const TOOLS = [
       type: 'object',
       properties: {
         code: { type: 'string', description: 'Swift source to review' },
-        path: { type: 'string', description: 'Path to a .swift file (absolute, or relative to the server working directory)' },
+        path: { type: 'string', description: 'Absolute path to a .swift file (relative paths resolve against the server process working directory)' },
         platform: { ...platformProp, description: 'Platform whose thresholds apply (default ios)' },
       },
       required: [],

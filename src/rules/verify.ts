@@ -1,7 +1,7 @@
 /**
- * Registry verification against live pages: every locator phrase must be found, and a rule whose
- * sentence sits under a platform-specific heading ("watchOS", "iOS, iPadOS") must be scoped to
- * those platforms. Used by `npm run smoke`.
+ * Registry verification against live pages: every locator phrase must match exactly one sentence
+ * (or table row), and a rule whose sentence sits under a platform-specific heading ("watchOS",
+ * "iOS, iPadOS") must be scoped to those platforms. Used by `npm run smoke`.
  */
 
 import type { HIGDoc } from '../hig/doc.js';
@@ -41,7 +41,9 @@ export function checkRule(rule: Rule, doc: HIGDoc): RuleCheck {
   const section = unit.headingPath.join(' > ');
   const scoped = unit.headingPath.map(headingPlatforms).filter((p): p is ApplePlatform[] => !!p).pop();
   let problem: string | undefined;
-  if (scoped) {
+  if (units.length > 1) {
+    problem = `phrase is ambiguous: it matches ${units.length} sentences on "${rule.source.slug}"`;
+  } else if (scoped) {
     const rulePlatforms = rule.platforms === 'all' ? [...PLATFORMS] : rule.platforms;
     const extra = rulePlatforms.filter((p) => !scoped.includes(p));
     if (extra.length) problem = `sentence is under "${section}" but the rule also claims ${extra.join(', ')}`;

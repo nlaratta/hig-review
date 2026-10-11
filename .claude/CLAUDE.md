@@ -25,7 +25,8 @@ claude plugin validate --strict .
 - The server never judges images. Tool descriptions, the skill and the README must not imply it does.
 - Every rule in `src/rules/registry.ts` must cite a live HIG page and a locator phrase you have
   confirmed on that page (run `npm run smoke`). Paraphrase `check` in our own words; never paste
-  Apple's sentences into the repo. Phrases stay short (a few words, max 120 chars, enforced by tests).
+  Apple's sentences into the repo. Phrases are short locator fragments (a few words, max 60 chars, enforced by tests) and must match
+  exactly one sentence on the page (smoke fails on ambiguous phrases).
 - A rule sourced from a platform-specific section ("watchOS", "iOS, iPadOS") must be scoped to those
   platforms; the smoke test enforces it.
 - Every SwiftUI heuristic needs positive and negative fixtures in `tests/fixtures/swiftui.ts`

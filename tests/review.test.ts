@@ -140,6 +140,7 @@ describe('review_swiftui', () => {
     fs.writeFileSync(path.join(dir, 'notes.txt'), 'x');
     await expect(loadSwift({ path: path.join(dir, 'notes.txt') })).rejects.toThrow(/Only .swift/);
     await expect(loadSwift({ path: path.join(dir, 'missing.swift') })).rejects.toThrow(/Cannot read/);
+    await expect(loadSwift({ path: 'missing.swift' }, dir)).rejects.toThrow(/pass an absolute path/);
     fs.writeFileSync(path.join(dir, 'Big.swift'), 'x'.repeat(201 * 1024));
     await expect(loadSwift({ path: path.join(dir, 'Big.swift') })).rejects.toThrow(/limit/);
     await expect(loadSwift({ code: 'x'.repeat(201 * 1024) })).rejects.toThrow(/larger/);

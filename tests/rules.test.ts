@@ -20,7 +20,7 @@ describe('rule registry integrity', () => {
   it.each(RULES.map((r) => [r.id, r] as const))('%s is well formed', (_id, r) => {
     expect(r.source.slug).toMatch(/^[a-z0-9-]+$/);
     expect(r.source.phrase.length).toBeGreaterThanOrEqual(5);
-    expect(r.source.phrase.length).toBeLessThanOrEqual(120); // locator, not a copy of Apple's text
+    expect(r.source.phrase.length).toBeLessThanOrEqual(60); // a locator fragment, not a copy of Apple's text
     expect(SEVERITIES).toContain(r.severity);
     expect(r.components.length).toBeGreaterThan(0);
     for (const c of r.components) expect(Object.keys(COMPONENTS)).toContain(c);
@@ -121,6 +121,8 @@ describe('citations', () => {
     expect(checkRule({ ...base, platforms: ['watchos'], source: { slug: 'w', phrase } }, page).ok).toBe(true);
     expect(checkRule({ ...base, platforms: 'all', source: { slug: 'w', phrase } }, page).problem).toMatch(/also claims/);
     expect(checkRule({ ...base, platforms: 'all', source: { slug: 'w', phrase: 'nope nope' } }, page).ok).toBe(false);
+    // A phrase that matches more than one sentence is ambiguous and fails.
+    expect(checkRule({ ...base, platforms: 'all', source: { slug: 'w', phrase: 'widget' } }, page).problem).toMatch(/ambiguous/);
   });
 });
 
@@ -142,7 +144,9 @@ describe('hig_checklist', () => {
     const r = resolveComponent('tabbbar');
     expect(r.component).toBeNull();
     expect(r.suggestions).toContain('tab-bar');
-    expect(resolveComponent('quantum flux').component).toBeNull();
+    const none = resolveComponent('quantum flux');
+    expect(none.component).toBeNull();
+    expect(none.suggestions).toEqual(Object.keys(COMPONENTS)); // nothing close: list everything
   });
 
   it('selects rules by component and platform, high severity first', () => {

@@ -26,6 +26,8 @@ Requires Node.js 20 or newer.
 
 Then paste a screenshot and ask "Review this screen against the HIG", or run `/hig-review:hig-review`.
 
+The plugin runs the self-contained `plugin/server.mjs`. Because the repository root also has a `package.json` and `package-lock.json`, Claude Code installs the npm dependencies into its plugin cache on install. It does this for every such plugin and can't be turned off. The server doesn't need them.
+
 **MCP server only (Claude Code).** The bundled server needs no `npm install`:
 
 ```bash
@@ -62,7 +64,7 @@ The server never analyzes images. All visual judgment is the model's, and the to
 | Tool | What it does |
 | --- | --- |
 | `hig_checklist` | `components: string[]` (for example `"tab bar"`, `"button"`, `"sheet"`, `"list"`, `"navigation bar"`, `"alert"`, `"typography"`, `"color"`, `"dark mode"`, `"accessibility"`, `"safe area"`, `"app icon"`, `"SF Symbols"`, `"onboarding"`) plus an optional `platform`. Returns the applicable rules with live citations. Unknown names come back with suggestions. |
-| `review_swiftui` | `code` or `path` (a `.swift` file, up to 200 KB) plus `platform` (default `ios`). Returns heuristic findings with rule id, lines, snippet, message, severity, confidence and citation, plus a summary. |
+| `review_swiftui` | `code` or `path` (a `.swift` file, up to 200 KB; prefer absolute paths, because relative ones resolve against the server's working directory) plus `platform` (default `ios`). Returns heuristic findings with rule id, lines, snippet, message, severity, confidence and citation, plus a summary. |
 | `check_contrast` | `foreground`, `background` (`#RGB`, `#RRGGBB`, `#RRGGBBAA`, `rgb()`/`rgba()`), and optional `fontSizePt` and `bold`. Returns the WCAG 2.x ratio, AA/AAA results and the HIG threshold for that text, with citations. |
 | `search_hig` | Ranked search over HIG page titles and summaries. |
 | `get_guideline` | A full HIG page as Markdown, by id (`buttons`), path or URL. |
@@ -163,7 +165,7 @@ docs/               ARCHITECTURE.md, RULES.md
 
 ## Content and copyright
 
-All guideline text and imagery belong to Apple Inc. This repository bundles none of it. Rules are written in our own words, and each stores only a short locator phrase used to find its sentence. Pages are fetched from Apple when a tool runs and cached locally on your machine. Quotes are limited to one sentence or table row, with a link to the source. Please follow [Apple's terms of use](https://www.apple.com/legal/internet-services/terms/site.html). The tests use small synthetic fixtures. "Apple" and related marks are trademarks of Apple Inc.
+All guideline text and imagery belong to Apple Inc. This repository bundles none of it. Rules are written in our own words, and each stores only a short locator fragment, a few words long, used to find its sentence. Pages are fetched from Apple when a tool runs and cached locally on your machine. Quotes are limited to one sentence or table row, with a link to the source. Please follow [Apple's terms of use](https://www.apple.com/legal/internet-services/terms/site.html). The tests use small synthetic fixtures. "Apple" and related marks are trademarks of Apple Inc.
 
 ## License
 

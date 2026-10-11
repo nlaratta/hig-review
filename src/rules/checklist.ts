@@ -36,8 +36,9 @@ export function resolveComponent(input: string): Resolution {
     (a, b) => b.alias.length - a.alias.length
   )[0];
   if (partial) return { requested: input, component: partial.component, suggestions: [] };
-  const suggestions = [...new Set(fuse.search(k).map((r) => r.item.component))].slice(0, 4);
-  return { requested: input, component: null, suggestions };
+  const fuzzy = [...new Set(fuse.search(k).map((r) => r.item.component))].slice(0, 4);
+  // Nothing close: offer the whole (short) list rather than nothing.
+  return { requested: input, component: null, suggestions: fuzzy.length ? fuzzy : Object.keys(COMPONENTS) };
 }
 
 export interface ChecklistRule {

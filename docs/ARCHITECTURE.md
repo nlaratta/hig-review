@@ -64,7 +64,7 @@ A page document contains:
   - A translucent background is composited over both white and black, and the worse ratio is reported.
   - Pass/fail uses the unrounded ratio.
   - The HIG categories come from the Accessibility page's table: text up to 17 pt needs 4.5:1, and 18 pt or bold text needs 3:1.
-- `verify.ts`: `checkRule` checks that the phrase is found. It also detects platform-scoped headings ("watchOS", "iOS, iPadOS"); a rule whose sentence sits under one must not claim other platforms. `npm run smoke` runs this for every rule against the live pages.
+- `verify.ts`: `checkRule` checks that the phrase matches exactly one sentence or table row, since an ambiguous fragment could quote the wrong sentence. It also detects platform-scoped headings ("watchOS", "iOS, iPadOS"); a rule whose sentence sits under one must not claim other platforms. `npm run smoke` runs this for every rule against the live pages.
 
 ### SwiftUI heuristics (`src/swift/`)
 

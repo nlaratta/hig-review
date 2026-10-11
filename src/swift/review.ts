@@ -58,7 +58,10 @@ export async function loadSwift(params: { code?: string; path?: string }, cwd = 
   try {
     stat = await fs.stat(file);
   } catch {
-    throw new HIGServerError('NOT_FOUND', `Cannot read ${file}`);
+    throw new HIGServerError(
+      'NOT_FOUND',
+      `Cannot read ${file}${path.isAbsolute(params.path) ? '' : ` (relative paths resolve against the server's working directory, ${cwd}; pass an absolute path)`}`
+    );
   }
   if (!stat.isFile()) throw new HIGServerError('INVALID_INPUT', `Not a file: ${file}`);
   if (stat.size > MAX_SOURCE_BYTES) {

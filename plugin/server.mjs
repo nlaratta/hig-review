@@ -22014,7 +22014,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Leave room between adjacent controls (roughly 12 pt around bezeled controls, 24 pt around borderless ones) so people do not hit the wrong one.",
-    source: { slug: "accessibility", phrase: "add about 12 points of padding around elements that include a bezel" }
+    source: { slug: "accessibility", phrase: "about 12 points of padding" }
   },
   {
     id: "buttons.hit-region",
@@ -22023,7 +22023,7 @@ var RULES = [
     platforms: ["ios", "ipados", "watchos", "visionos"],
     severity: "high",
     check: "Each button needs enough space around it and a hit region of at least 44x44 pt (60x60 pt in visionOS).",
-    source: { slug: "buttons", phrase: "a button needs a hit region of at least 44x44 pt" }
+    source: { slug: "buttons", phrase: "hit region of at least 44x44 pt" }
   },
   {
     id: "buttons.press-state",
@@ -22032,7 +22032,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Custom tappable views must visibly react when pressed; a view that acts like a button without a press state feels unresponsive.",
-    source: { slug: "buttons", phrase: "Always include a press state for a custom button" }
+    source: { slug: "buttons", phrase: "include a press state for a custom button" }
   },
   {
     id: "buttons.purpose",
@@ -22041,7 +22041,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Every button makes its action clear through its symbol, its label or both; ambiguous icons need text.",
-    source: { slug: "buttons", phrase: "Ensure that each button clearly communicates its purpose" }
+    source: { slug: "buttons", phrase: "clearly communicates its purpose" }
   },
   {
     id: "buttons.prominent-style",
@@ -22050,7 +22050,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "The most likely action in a view uses a prominent button style; avoid several competing prominent buttons.",
-    source: { slug: "buttons", phrase: "use a button that has a prominent visual style for the most likely action" }
+    source: { slug: "buttons", phrase: "prominent visual style for the most likely action" }
   },
   {
     id: "buttons.destructive-not-primary",
@@ -22059,7 +22059,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "A button that performs a destructive action is never given the primary (default) role.",
-    source: { slug: "buttons", phrase: "assign the primary role to a button that performs a destructive action" }
+    source: { slug: "buttons", phrase: "primary role to a button that performs a destructive action" }
   },
   {
     id: "buttons.familiar-icons",
@@ -22068,7 +22068,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Common actions (share, add, delete\u2026) use the familiar system symbol rather than a novel glyph.",
-    source: { slug: "buttons", phrase: "Try to associate familiar actions with familiar icons" }
+    source: { slug: "buttons", phrase: "familiar actions with familiar icons" }
   },
   // ---------------------------------------------------------------- Typography
   {
@@ -22078,7 +22078,7 @@ var RULES = [
     platforms: ["ios", "ipados", "tvos", "visionos", "watchos"],
     severity: "high",
     check: "Text uses built-in text styles (or fonts scaled relative to one) so it follows the Dynamic Type setting; fixed point sizes do not scale.",
-    source: { slug: "typography", phrase: "Using text styles with the system fonts also ensures support for Dynamic Type" }
+    source: { slug: "typography", phrase: "also ensures support for Dynamic Type" }
   },
   {
     id: "type.layout-adapts",
@@ -22096,7 +22096,7 @@ var RULES = [
     platforms: ["ios", "ipados", "tvos", "visionos", "watchos"],
     severity: "medium",
     check: "Text is not truncated more than necessary as font size grows; labels can wrap to multiple lines.",
-    source: { slug: "typography", phrase: "Keep text truncation to a minimum as font size increases" }
+    source: { slug: "typography", phrase: "Keep text truncation to a minimum" }
   },
   {
     id: "type.light-weights",
@@ -22105,7 +22105,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Body and UI text avoids Ultralight, Thin and Light weights, which are hard to read at small sizes.",
-    source: { slug: "typography", phrase: "In general, avoid light font weights" }
+    source: { slug: "typography", phrase: "avoid light font weights" }
   },
   {
     id: "type.size.ios",
@@ -22204,7 +22204,7 @@ var RULES = [
     platforms: "all",
     severity: "high",
     check: "Contrast holds in both light and dark appearances: never below 4.5:1, ideally 7:1 for custom colors and small text.",
-    source: { slug: "dark-mode", phrase: "make sure the contrast ratio between colors is no lower than 4.5:1" },
+    source: { slug: "dark-mode", phrase: "no lower than 4.5:1" },
     data: { ratio: 4.5, preferredRatio: 7 }
   },
   {
@@ -22214,7 +22214,7 @@ var RULES = [
     platforms: "all",
     severity: "high",
     check: "State, status and interactivity are also shown with shape, icon or text, not color alone.",
-    source: { slug: "accessibility", phrase: "Convey information with more than color alone" }
+    source: { slug: "accessibility", phrase: "more than color alone" }
   },
   {
     id: "color.system-colors",
@@ -22232,7 +22232,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Every custom color has variants that work in light, dark and increased-contrast modes.",
-    source: { slug: "color", phrase: "colors work well in light, dark, and increased contrast contexts" }
+    source: { slug: "color", phrase: "light, dark, and increased contrast contexts" }
   },
   {
     id: "color.consistent-meaning",
@@ -22241,7 +22241,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "A color means the same thing everywhere (e.g. the tint used for interactive elements is not used for plain text).",
-    source: { slug: "color", phrase: "Avoid using the same color to mean different things" }
+    source: { slug: "color", phrase: "same color to mean different things" }
   },
   {
     id: "color.semantic-meaning",
@@ -22250,7 +22250,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Dynamic system colors are used for their stated purpose (no separator color for text, no label color for backgrounds).",
-    source: { slug: "color", phrase: "Avoid redefining the semantic meanings of dynamic system colors" }
+    source: { slug: "color", phrase: "redefining the semantic meanings" }
   },
   // ---------------------------------------------------------------- Dark Mode
   {
@@ -22260,7 +22260,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Avoid hard-coded color values; use semantic colors or asset-catalog color sets with light and dark variants.",
-    source: { slug: "dark-mode", phrase: "Avoid using hard-coded color values or colors" }
+    source: { slug: "dark-mode", phrase: "hard-coded color values or colors" }
   },
   {
     id: "dark.both-modes",
@@ -22269,7 +22269,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "The UI looks good and stays legible in both light and dark appearance; review both screenshots.",
-    source: { slug: "dark-mode", phrase: "Ensure that your app looks good in both appearance modes" }
+    source: { slug: "dark-mode", phrase: "looks good in both appearance modes" }
   },
   {
     id: "dark.no-app-setting",
@@ -22278,7 +22278,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "The app follows the system appearance rather than offering its own light/dark switch.",
-    source: { slug: "dark-mode", phrase: "Avoid offering an app-specific appearance setting" }
+    source: { slug: "dark-mode", phrase: "app-specific appearance setting" }
   },
   {
     id: "dark.label-colors",
@@ -22287,7 +22287,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Labels use the primary/secondary/tertiary/quaternary system label colors so they adapt automatically.",
-    source: { slug: "dark-mode", phrase: "Use the system-provided label colors for labels" }
+    source: { slug: "dark-mode", phrase: "system-provided label colors for labels" }
   },
   {
     id: "dark.system-backgrounds",
@@ -22306,7 +22306,7 @@ var RULES = [
     platforms: "all",
     severity: "high",
     check: "Every key element, especially icon-only buttons, has a descriptive accessibility label for VoiceOver.",
-    source: { slug: "voiceover", phrase: "Provide alternative labels for all key interface elements" }
+    source: { slug: "voiceover", phrase: "alternative labels for all key interface elements" }
   },
   {
     id: "a11y.custom-elements",
@@ -22315,7 +22315,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Custom-drawn or custom-composed controls carry their own accessibility labels.",
-    source: { slug: "voiceover", phrase: "Add labels to any custom elements your app defines" }
+    source: { slug: "voiceover", phrase: "labels to any custom elements" }
   },
   {
     id: "a11y.meaningful-images",
@@ -22333,7 +22333,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Purely decorative images are hidden from VoiceOver.",
-    source: { slug: "voiceover", phrase: "Exclude purely decorative images from VoiceOver" }
+    source: { slug: "voiceover", phrase: "Exclude purely decorative images" }
   },
   {
     id: "a11y.gesture-alternatives",
@@ -22361,7 +22361,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Full-screen background content extends underneath sidebars, toolbars and tab bars instead of stopping at them.",
-    source: { slug: "layout", phrase: "For full-screen background content, be sure to extend it underneath sidebars, toolbars, and tab bars" }
+    source: { slug: "layout", phrase: "For full-screen background content" }
   },
   {
     id: "layout.size-classes",
@@ -22370,7 +22370,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Layout decisions use the available space (size classes, container size), not device type, screen bounds or orientation.",
-    source: { slug: "layout", phrase: "Determine layout based on size classes, not device type or orientation" }
+    source: { slug: "layout", phrase: "based on size classes, not device type" }
   },
   {
     id: "layout.adapts",
@@ -22379,7 +22379,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "The layout adapts to rotation, window resizing and other devices while respecting system margins and guides.",
-    source: { slug: "layout", phrase: "respecting system-defined safe areas, margins, and guides" }
+    source: { slug: "layout", phrase: "safe areas, margins, and guides" }
   },
   {
     id: "layout.text-size-changes",
@@ -22407,7 +22407,7 @@ var RULES = [
     platforms: "all",
     severity: "high",
     check: "Tabs switch between sections; actions on the current view belong in a toolbar, not the tab bar.",
-    source: { slug: "tab-bars", phrase: "Use a tab bar to support navigation, not to provide actions" }
+    source: { slug: "tab-bars", phrase: "support navigation, not to provide actions" }
   },
   {
     id: "tabbar.visible",
@@ -22416,7 +22416,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "The tab bar remains visible across sections (a modal covering it is the exception).",
-    source: { slug: "tab-bars", phrase: "Make sure the tab bar is visible when people navigate to different sections" }
+    source: { slug: "tab-bars", phrase: "Make sure the tab bar is visible" }
   },
   {
     id: "tabbar.tab-count",
@@ -22425,7 +22425,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Only as many tabs as navigation needs; consider a sidebar (or sidebar-adaptable tab bar) for complex hierarchies.",
-    source: { slug: "tab-bars", phrase: "Use the appropriate number of tabs required to help people navigate your app" }
+    source: { slug: "tab-bars", phrase: "appropriate number of tabs" }
   },
   {
     id: "tabbar.no-overflow",
@@ -22443,7 +22443,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Tabs are never greyed out or removed when their content is unavailable; the tab explains why it is empty.",
-    source: { slug: "tab-bars", phrase: "disable or hide tab bar buttons, even when their content is unavailable" }
+    source: { slug: "tab-bars", phrase: "disable or hide tab bar buttons" }
   },
   {
     id: "tabbar.labels",
@@ -22452,7 +22452,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Each tab has a short (ideally single-word) text label, not just an icon.",
-    source: { slug: "tab-bars", phrase: "Include tab labels to help with navigation" }
+    source: { slug: "tab-bars", phrase: "Include tab labels" }
   },
   {
     id: "tabbar.symbols",
@@ -22461,7 +22461,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Tab icons are SF Symbols (preferably filled) so they adapt between compact and regular layouts.",
-    source: { slug: "tab-bars", phrase: "Consider using SF Symbols to provide familiar, scalable tab bar icons" }
+    source: { slug: "tab-bars", phrase: "familiar, scalable tab bar icons" }
   },
   // ---------------------------------------------------------------- Toolbars and navigation bars
   {
@@ -22471,7 +22471,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "The toolbar holds only the essential items; extras go in a More menu.",
-    source: { slug: "toolbars", phrase: "Choose items deliberately to avoid overcrowding" }
+    source: { slug: "toolbars", phrase: "avoid overcrowding" }
   },
   {
     id: "toolbar.back-close",
@@ -22480,7 +22480,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Navigation uses the standard Back and Close buttons rather than custom replacements.",
-    source: { slug: "toolbars", phrase: "Use the standard Back and Close buttons" }
+    source: { slug: "toolbars", phrase: "standard Back and Close buttons" }
   },
   {
     id: "toolbar.clear-controls",
@@ -22489,7 +22489,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "The meaning of every toolbar control is clear from its symbol or label.",
-    source: { slug: "toolbars", phrase: "Make sure the meaning of each control is clear" }
+    source: { slug: "toolbars", phrase: "meaning of each control is clear" }
   },
   {
     id: "toolbar.useful-title",
@@ -22498,7 +22498,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Each screen or window has a useful, concise title, not just the app name.",
-    source: { slug: "toolbars", phrase: "Provide a useful title for each window" }
+    source: { slug: "toolbars", phrase: "useful title for each window" }
   },
   {
     id: "toolbar.large-title",
@@ -22507,7 +22507,7 @@ var RULES = [
     platforms: ["ios"],
     severity: "low",
     check: "Top-level screens use a large title that helps people stay oriented while scrolling.",
-    source: { slug: "toolbars", phrase: "Use a large title to help people stay oriented" }
+    source: { slug: "toolbars", phrase: "Use a large title" }
   },
   // ---------------------------------------------------------------- Alerts and action sheets
   {
@@ -22536,7 +22536,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "The app does not greet people with an alert when it starts.",
-    source: { slug: "alerts", phrase: "Avoid showing an alert when your app starts" }
+    source: { slug: "alerts", phrase: "alert when your app starts" }
   },
   {
     id: "alert.title",
@@ -22545,7 +22545,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "The alert title clearly and succinctly describes the situation.",
-    source: { slug: "alerts", phrase: "Write a title that clearly and succinctly describes the situation" }
+    source: { slug: "alerts", phrase: "clearly and succinctly describes the situation" }
   },
   {
     id: "alert.button-titles",
@@ -22554,7 +22554,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: 'Alert buttons have one- or two-word titles that name the result ("Delete", "Reply"), not "Yes"/"No".',
-    source: { slug: "alerts", phrase: "Aim for a one- or two-word title that describes the result of selecting the button" }
+    source: { slug: "alerts", phrase: "one- or two-word title" }
   },
   {
     id: "alert.no-ok",
@@ -22563,7 +22563,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: '"OK" is only used in purely informational alerts.',
-    source: { slug: "alerts", phrase: "Avoid using OK as the default button title unless the alert is purely informational" }
+    source: { slug: "alerts", phrase: "Avoid using OK as the default button title" }
   },
   {
     id: "alert.cancel-with-destructive",
@@ -22572,7 +22572,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: 'An alert offering a destructive action also offers a button titled "Cancel".',
-    source: { slug: "alerts", phrase: "include a Cancel button to give people a clear, safe way to avoid the action" }
+    source: { slug: "alerts", phrase: "clear, safe way to avoid the action" }
   },
   {
     id: "actionsheet.intentional-action",
@@ -22581,7 +22581,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Choices related to something the person deliberately started are offered in an action sheet, not an alert.",
-    source: { slug: "action-sheets", phrase: "to offer choices related to an intentional action" }
+    source: { slug: "action-sheets", phrase: "choices related to an intentional action" }
   },
   {
     id: "actionsheet.cancel",
@@ -22590,7 +22590,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "An action sheet that can destroy data includes a Cancel button.",
-    source: { slug: "action-sheets", phrase: "provide a Cancel button that lets people reject an action that might destroy data" }
+    source: { slug: "action-sheets", phrase: "action that might destroy data" }
   },
   {
     id: "actionsheet.max-buttons.watchos",
@@ -22599,7 +22599,7 @@ var RULES = [
     platforms: ["watchos"],
     severity: "medium",
     check: "On watchOS an action sheet shows no more than four buttons including Cancel.",
-    source: { slug: "action-sheets", phrase: "Avoid displaying more than four buttons in an action sheet" },
+    source: { slug: "action-sheets", phrase: "more than four buttons in an action sheet" },
     data: { maxButtons: 4 }
   },
   // ---------------------------------------------------------------- Sheets
@@ -22610,7 +22610,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Only one sheet is presented from the main interface at a time; no stacked sheets.",
-    source: { slug: "sheets", phrase: "Display only one sheet at a time from the main interface" }
+    source: { slug: "sheets", phrase: "only one sheet at a time" }
   },
   {
     id: "sheet.complex-flows",
@@ -22619,7 +22619,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Long or complex flows are not crammed into a sheet.",
-    source: { slug: "sheets", phrase: "For complex or prolonged user flows, consider alternatives to sheets" }
+    source: { slug: "sheets", phrase: "consider alternatives to sheets" }
   },
   {
     id: "sheet.grabber",
@@ -22628,7 +22628,7 @@ var RULES = [
     platforms: IOS,
     severity: "low",
     check: "A resizable sheet (with detents) shows a grabber.",
-    source: { slug: "sheets", phrase: "Include a grabber in a resizable sheet" }
+    source: { slug: "sheets", phrase: "grabber in a resizable sheet" }
   },
   {
     id: "sheet.swipe-dismiss",
@@ -22637,7 +22637,7 @@ var RULES = [
     platforms: IOS,
     severity: "medium",
     check: "Sheets can be dismissed by swiping down (confirm before discarding unsaved changes).",
-    source: { slug: "sheets", phrase: "Support swiping to dismiss a sheet" }
+    source: { slug: "sheets", phrase: "swiping to dismiss a sheet" }
   },
   // ---------------------------------------------------------------- Lists and tables
   {
@@ -22647,7 +22647,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Row text is short enough to read comfortably without heavy truncation.",
-    source: { slug: "lists-and-tables", phrase: "Keep item text succinct so row content is comfortable to read" }
+    source: { slug: "lists-and-tables", phrase: "Keep item text succinct" }
   },
   {
     id: "list.selection-feedback",
@@ -22656,7 +22656,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Selecting a row gives visible feedback (highlight, navigation, checkmark).",
-    source: { slug: "lists-and-tables", phrase: "Provide appropriate feedback when people select a list item" }
+    source: { slug: "lists-and-tables", phrase: "feedback when people select a list item" }
   },
   {
     id: "list.info-button",
@@ -22665,7 +22665,7 @@ var RULES = [
     platforms: ["ios", "ipados", "visionos"],
     severity: "low",
     check: "A row info button reveals more information about the row, never navigation or actions.",
-    source: { slug: "lists-and-tables", phrase: "Use an info button only to reveal more information about a row" }
+    source: { slug: "lists-and-tables", phrase: "info button only to reveal more information" }
   },
   // ---------------------------------------------------------------- Toggles, segmented controls, text fields
   {
@@ -22675,7 +22675,7 @@ var RULES = [
     platforms: IOS,
     severity: "medium",
     check: "The switch style is used in list rows; outside a list, use a button that behaves like a toggle.",
-    source: { slug: "toggles", phrase: "Use the switch toggle style only in a list row" }
+    source: { slug: "toggles", phrase: "switch toggle style only in a list row" }
   },
   {
     id: "toggle.identify",
@@ -22684,7 +22684,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "It is clear which setting or content each toggle affects.",
-    source: { slug: "toggles", phrase: "Clearly identify the setting, view, or content the toggle affects" }
+    source: { slug: "toggles", phrase: "content the toggle affects" }
   },
   {
     id: "toggle.obvious-states",
@@ -22693,7 +22693,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "On and off states differ visibly (not just by a subtle tint).",
-    source: { slug: "toggles", phrase: "Make sure the visual differences in a toggle's state are obvious" }
+    source: { slug: "toggles", phrase: "visual differences in a toggle" }
   },
   {
     id: "segmented.count",
@@ -22702,7 +22702,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "A segmented control has about five segments at most on iPhone, five to seven in wide layouts.",
-    source: { slug: "segmented-controls", phrase: "no more than about five segments on iPhone" },
+    source: { slug: "segmented-controls", phrase: "about five segments on iPhone" },
     data: { maxIphone: 5, maxWide: 7 }
   },
   {
@@ -22712,7 +22712,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Segments use either text or images consistently, not a mix.",
-    source: { slug: "segmented-controls", phrase: "Prefer using either text or images" }
+    source: { slug: "segmented-controls", phrase: "either text or images" }
   },
   {
     id: "textfield.hint",
@@ -22721,7 +22721,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Text fields show a placeholder hint describing their purpose (in addition to a label where needed).",
-    source: { slug: "text-fields", phrase: "Show a hint in a text field to help communicate its purpose" }
+    source: { slug: "text-fields", phrase: "Show a hint in a text field" }
   },
   {
     id: "textfield.secure",
@@ -22730,7 +22730,7 @@ var RULES = [
     platforms: "all",
     severity: "high",
     check: "Passwords and other sensitive input use a secure text field.",
-    source: { slug: "text-fields", phrase: "Always use a secure text field when your app asks for sensitive data" }
+    source: { slug: "text-fields", phrase: "Always use a secure text field" }
   },
   {
     id: "textfield.keyboard-type",
@@ -22749,7 +22749,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Core actions are reachable by more than one kind of interaction.",
-    source: { slug: "gestures", phrase: "Give people more than one way to interact with your app" }
+    source: { slug: "gestures", phrase: "more than one way to interact" }
   },
   {
     id: "gestures.system-conflicts",
@@ -22758,7 +22758,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Custom gestures do not conflict with system edge gestures (Home, Control Center, back swipe).",
-    source: { slug: "gestures", phrase: "Avoid conflicting with gestures that access system UI" }
+    source: { slug: "gestures", phrase: "gestures that access system UI" }
   },
   // ---------------------------------------------------------------- SF Symbols
   {
@@ -22777,7 +22777,7 @@ var RULES = [
     platforms: ["ios", "ipados", "tvos", "visionos", "watchos"],
     severity: "medium",
     check: "Meaningful interface icons get larger as the text size increases (SF Symbols do this automatically).",
-    source: { slug: "typography", phrase: "Increase the size of meaningful interface icons as font size increases" }
+    source: { slug: "typography", phrase: "meaningful interface icons as font size increases" }
   },
   {
     id: "symbols.animations",
@@ -22786,7 +22786,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Symbol animations are used sparingly and communicate something.",
-    source: { slug: "sf-symbols", phrase: "Apply symbol animations judiciously" }
+    source: { slug: "sf-symbols", phrase: "symbol animations judiciously" }
   },
   // ---------------------------------------------------------------- App icons
   {
@@ -22796,7 +22796,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "The main icon content is centered so masking and corner adjustments do not cut it off.",
-    source: { slug: "app-icons", phrase: "Keep primary content centered to avoid truncation" }
+    source: { slug: "app-icons", phrase: "Keep primary content centered" }
   },
   {
     id: "icon.text",
@@ -22805,7 +22805,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "The icon contains no text unless it is essential to the brand.",
-    source: { slug: "app-icons", phrase: "Include text only when it's essential to your experience or brand" }
+    source: { slug: "app-icons", phrase: "Include text only when" }
   },
   {
     id: "icon.no-photos-or-ui",
@@ -22814,7 +22814,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "The icon uses illustration rather than photos and does not mimic UI components.",
-    source: { slug: "app-icons", phrase: "Prefer illustrations to photos and avoid replicating UI components" }
+    source: { slug: "app-icons", phrase: "Prefer illustrations to photos" }
   },
   {
     id: "icon.no-apple-hardware",
@@ -22823,7 +22823,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "The icon does not depict Apple hardware products.",
-    source: { slug: "app-icons", phrase: "use replicas of Apple hardware products" }
+    source: { slug: "app-icons", phrase: "replicas of Apple hardware products" }
   },
   {
     id: "icon.consistent",
@@ -22832,7 +22832,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "The icon design is visually consistent on every platform the app supports.",
-    source: { slug: "app-icons", phrase: "Provide a visually consistent icon design across all the platforms" }
+    source: { slug: "app-icons", phrase: "visually consistent icon design" }
   },
   {
     id: "icon.dark-tinted",
@@ -22869,7 +22869,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "Any required onboarding flow is brief and does not ask people to memorize much.",
-    source: { slug: "onboarding", phrase: "design a brief, enjoyable experience" }
+    source: { slug: "onboarding", phrase: "brief, enjoyable experience" }
   },
   {
     id: "onboarding.optional-tutorial",
@@ -22887,7 +22887,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Licensing details are not shown in the onboarding flow.",
-    source: { slug: "onboarding", phrase: "Avoid displaying licensing details within your onboarding flow" }
+    source: { slug: "onboarding", phrase: "licensing details within your onboarding flow" }
   },
   {
     id: "onboarding.postpone-setup",
@@ -22896,7 +22896,7 @@ var RULES = [
     platforms: "all",
     severity: "low",
     check: "Optional setup and customization steps come later, not before people can use the app.",
-    source: { slug: "onboarding", phrase: "Postpone nonessential setup flows or customization steps" }
+    source: { slug: "onboarding", phrase: "Postpone nonessential setup flows" }
   },
   {
     id: "onboarding.ratings-later",
@@ -22905,7 +22905,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "People experience the app before being asked for ratings or purchases.",
-    source: { slug: "onboarding", phrase: "before prompting them for ratings or purchases" }
+    source: { slug: "onboarding", phrase: "prompting them for ratings or purchases" }
   },
   {
     id: "launch.match-first-screen",
@@ -22914,7 +22914,7 @@ var RULES = [
     platforms: "all",
     severity: "medium",
     check: "The launch screen is nearly identical to the first screen, so launch feels instant.",
-    source: { slug: "launching", phrase: "nearly identical to the first screen of your app or game" }
+    source: { slug: "launching", phrase: "nearly identical to the first screen" }
   },
   {
     id: "launch.no-text",
@@ -22984,8 +22984,8 @@ function resolveComponent(input) {
     (a, b) => b.alias.length - a.alias.length
   )[0];
   if (partial2) return { requested: input, component: partial2.component, suggestions: [] };
-  const suggestions = [...new Set(fuse.search(k).map((r) => r.item.component))].slice(0, 4);
-  return { requested: input, component: null, suggestions };
+  const fuzzy = [...new Set(fuse.search(k).map((r) => r.item.component))].slice(0, 4);
+  return { requested: input, component: null, suggestions: fuzzy.length ? fuzzy : Object.keys(COMPONENTS) };
 }
 var SEVERITY_ORDER = { high: 0, medium: 1, low: 2 };
 function selectRules(components, platform) {
@@ -23899,7 +23899,10 @@ async function loadSwift(params, cwd = process.cwd()) {
   try {
     stat = await fs2.stat(file);
   } catch {
-    throw new HIGServerError("NOT_FOUND", `Cannot read ${file}`);
+    throw new HIGServerError(
+      "NOT_FOUND",
+      `Cannot read ${file}${path3.isAbsolute(params.path) ? "" : ` (relative paths resolve against the server's working directory, ${cwd}; pass an absolute path)`}`
+    );
   }
   if (!stat.isFile()) throw new HIGServerError("INVALID_INPUT", `Not a file: ${file}`);
   if (stat.size > MAX_SOURCE_BYTES) {
@@ -23967,7 +23970,7 @@ var TOOLS = [
       type: "object",
       properties: {
         code: { type: "string", description: "Swift source to review" },
-        path: { type: "string", description: "Path to a .swift file (absolute, or relative to the server working directory)" },
+        path: { type: "string", description: "Absolute path to a .swift file (relative paths resolve against the server process working directory)" },
         platform: { ...platformProp, description: "Platform whose thresholds apply (default ios)" }
       },
       required: []

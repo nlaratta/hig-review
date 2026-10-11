@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { ancestorSlugs, childSlugs, docPlatforms, inlineToText, slugFromIdentifier } from '../src/hig/doc.js';
 import { renderGuideline, extractHeadings } from '../src/hig/render.js';
@@ -64,7 +65,7 @@ describe('renderGuideline', () => {
     expect(md).toMatch(/^# Buttons/);
     expect(md).toContain('Source: https://developer.apple.com/design/human-interface-guidelines/buttons');
     expect(md).toContain('Platforms: ios, macos');
-    expect(md).toContain('> A button initiates an instantaneous action.');
+    expect(md).toContain('> A sample control starts a speedy task.');
   });
 
   it('renders inline markup, references, headings, lists, asides and tables', () => {
@@ -101,7 +102,7 @@ describe('catalog', () => {
     expect([...catalog.keys()].sort()).toEqual(['buttons', 'color', 'components', 'foundations', 'menus']);
     expect(catalog.get('components')!.children).toEqual(['buttons', 'menus']);
     expect(catalog.get('buttons')!.path).toEqual(['components', 'buttons']);
-    expect(catalog.get('buttons')!.abstract).toBe('A button initiates an instantaneous action.');
+    expect(catalog.get('buttons')!.abstract).toBe('A sample control starts a speedy task.');
   });
 });
 
@@ -126,7 +127,7 @@ describe('search ranking', () => {
 
   it('finds by title, abstract and typo, best first', () => {
     expect(searchEntries(entries, 'buttons')[0].entry.slug).toBe('buttons');
-    expect(searchEntries(entries, 'instantaneous')[0].entry.slug).toBe('buttons');
+    expect(searchEntries(entries, 'speedy')[0].entry.slug).toBe('buttons');
     expect(searchEntries(entries, 'buton')[0].entry.slug).toBe('buttons');
     expect(searchEntries(entries, 'zzzzqq')).toEqual([]);
   });
@@ -194,5 +195,31 @@ describe('HIGService', () => {
 
   it('suggests alternatives for unknown pages', async () => {
     await expect(service().getGuideline({ guidelineId: 'butons', includeExamples: true })).rejects.toThrow(/Did you mean: buttons/);
+  });
+});
+
+describe('fixtures', () => {
+  it('stay synthetic: no copies of Apple sentences (review nit 4)', () => {
+    const files = ['docs.ts', 'pages.ts', 'swiftui.ts'].map((f) => fs.readFileSync(new URL(`./fixtures/${f}`, import.meta.url), 'utf8'));
+    for (const text of files) {
+      expect(text).not.toMatch(/initiates an instantaneous action/);
+      expect(text).not.toMatch(/reveals its options/);
+    }
+  });
+});
+
+describe('plugin instructions and CI', () => {
+  it('the skill and agent require an explicit platform for review_swiftui (review nit 2)', () => {
+    const skill = fs.readFileSync(new URL('../skills/hig-review/SKILL.md', import.meta.url), 'utf8');
+    const agent = fs.readFileSync(new URL('../agents/hig-reviewer.md', import.meta.url), 'utf8');
+    expect(skill).toMatch(/Always pass `platform`[\s\S]*assumed iOS/);
+    expect(agent).toMatch(/explicit `platform`[\s\S]*assumed iOS/);
+  });
+
+  it('CI asserts the bundle files are tracked before rebuilding (review nit 3)', () => {
+    const ci = fs.readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+    const tracked = ci.indexOf('git ls-files --error-unmatch plugin/server.mjs plugin/THIRD_PARTY_LICENSES.txt');
+    expect(tracked).toBeGreaterThan(0);
+    expect(tracked).toBeLessThan(ci.indexOf('npm run bundle'));
   });
 });

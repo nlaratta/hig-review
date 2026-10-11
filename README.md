@@ -9,7 +9,7 @@
 
 Review Apple-platform UI against the Human Interface Guidelines from Claude: cited checklists, SwiftUI heuristics, contrast checks.
 
-Show Claude a screenshot, simulator capture or SwiftUI view and ask what breaks the HIG. Claude does the looking. hig-review supplies the rules: 105 curated checks across 21 HIG pages, each cited with a link and a one-sentence quote fetched live from Apple. It also runs deterministic checks on code and colors. It ships as an MCP server and as a Claude Code plugin with a review skill and a reviewer subagent.
+Show Claude a screenshot, simulator capture or SwiftUI view and ask what breaks the HIG. Claude does the looking. hig-review supplies the rules: 107 curated checks across 21 HIG pages, each cited with a link and a one-sentence quote fetched live from Apple. It also runs deterministic checks on code and colors. It ships as an MCP server and as a Claude Code plugin with a review skill and a reviewer subagent.
 
 Unofficial: not affiliated with or endorsed by Apple. See [Content and copyright](#content-and-copyright).
 
@@ -65,7 +65,7 @@ The server never analyzes images. All visual judgment is the model's, and the to
 | --- | --- |
 | `hig_checklist` | `components: string[]` (for example `"tab bar"`, `"button"`, `"sheet"`, `"list"`, `"navigation bar"`, `"alert"`, `"typography"`, `"color"`, `"dark mode"`, `"accessibility"`, `"safe area"`, `"app icon"`, `"SF Symbols"`, `"onboarding"`) plus an optional `platform`. Returns the applicable rules with live citations. Unknown names come back with suggestions. |
 | `review_swiftui` | `code` or `path` (a `.swift` file, up to 200 KB; prefer absolute paths, because relative ones resolve against the server's working directory) plus `platform` (default `ios`). Returns heuristic findings with rule id, lines, snippet, message, severity, confidence and citation, plus a summary. |
-| `check_contrast` | `foreground`, `background` (`#RGB`, `#RRGGBB`, `#RRGGBBAA`, `rgb()`/`rgba()`), and optional `fontSizePt` and `bold`. Returns the WCAG 2.x ratio, AA/AAA results and the HIG threshold for that text, with citations. |
+| `check_contrast` | `foreground`, `background` (`#RGB`, `#RRGGBB`, `#RRGGBBAA`, `rgb()`/`rgba()`), plus optional `backdrop`, `fontSizePt` and `bold`. Returns the WCAG 2.x ratio and AA/AAA results. Separately, it returns the HIG Accessibility table verdict for that text and the Dark Mode minimum (4.5:1) and preferred (7:1) results, with citations. A translucent background needs an opaque `backdrop`; without one the result is `compliance: "unknown"`. |
 | `search_hig` | Ranked search over HIG page titles and summaries. |
 | `get_guideline` | A full HIG page as Markdown, by id (`buttons`), path or URL. |
 | `browse_hig` | The HIG table of contents, or the pages in a section. |
@@ -77,10 +77,10 @@ The full list, with every rule's paraphrase and source page, is in [docs/RULES.m
 
 | Area | Rule ids | Verified on |
 | --- | --- | --- |
-| Hit targets and spacing | `controls.size.{ios,macos,tvos,visionos,watchos}`, `controls.spacing`, `buttons.hit-region` | [Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility), [Buttons](https://developer.apple.com/design/human-interface-guidelines/buttons) |
+| Hit targets and spacing | `controls.size.{ios,macos,tvos,visionos,watchos}`, `controls.spacing.{bezeled,borderless}`, `buttons.hit-region` | [Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility), [Buttons](https://developer.apple.com/design/human-interface-guidelines/buttons) |
 | Buttons | `buttons.press-state`, `buttons.purpose`, `buttons.prominent-style`, `buttons.destructive-not-primary`, `buttons.familiar-icons` | [Buttons](https://developer.apple.com/design/human-interface-guidelines/buttons) |
 | Typography and Dynamic Type | `type.dynamic-type`, `type.layout-adapts`, `type.truncation`, `type.light-weights`, `type.size.<platform>`, `a11y.larger-text`, `symbols.scale-with-text` | [Typography](https://developer.apple.com/design/human-interface-guidelines/typography), [Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility) |
-| Contrast and color | `contrast.text`, `contrast.large-text`, `contrast.bold-text`, `contrast.all-appearances`, `color.not-alone`, `color.system-colors`, `color.all-contexts`, `color.consistent-meaning`, `color.semantic-meaning` | [Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility), [Color](https://developer.apple.com/design/human-interface-guidelines/color), [Dark Mode](https://developer.apple.com/design/human-interface-guidelines/dark-mode) |
+| Contrast and color | `contrast.text`, `contrast.large-text`, `contrast.bold-text`, `contrast.all-appearances`, `contrast.preferred`, `color.not-alone`, `color.system-colors`, `color.all-contexts`, `color.consistent-meaning`, `color.semantic-meaning` | [Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility), [Color](https://developer.apple.com/design/human-interface-guidelines/color), [Dark Mode](https://developer.apple.com/design/human-interface-guidelines/dark-mode) |
 | Dark Mode | `dark.adaptive-colors`, `dark.both-modes`, `dark.no-app-setting`, `dark.label-colors`, `dark.system-backgrounds` | [Dark Mode](https://developer.apple.com/design/human-interface-guidelines/dark-mode) |
 | VoiceOver and gestures | `a11y.labels`, `a11y.custom-elements`, `a11y.meaningful-images`, `a11y.decorative-images`, `a11y.gesture-alternatives`, `gestures.*` | [VoiceOver](https://developer.apple.com/design/human-interface-guidelines/voiceover), [Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility), [Gestures](https://developer.apple.com/design/human-interface-guidelines/gestures) |
 | Layout | `layout.safe-area`, `layout.full-bleed-backgrounds`, `layout.size-classes`, `layout.adapts`, `layout.text-size-changes`, `layout.controls-vs-content` | [Layout](https://developer.apple.com/design/human-interface-guidelines/layout) |
@@ -110,7 +110,8 @@ The full list, with every rule's paraphrase and source page, is in [docs/RULES.m
 - **Heuristics misfire.** `review_swiftui` does lexical analysis, not compilation. It can't see custom styles, wrapper views or runtime values, and it misses anything not written literally. Treat findings as leads, and don't read an empty result as a pass.
 - **The model does the visual judgment.** Sizes and colors estimated from a screenshot are approximations; the skill tells Claude to say so. `check_contrast` is exact only for the colors you give it.
 - **Curated, not complete.** The rules cover common review points, not the whole HIG. Use `get_guideline` to read the full page.
-- **Rules can go stale.** Each citation is re-fetched and matched at call time. A rule whose sentence Apple has changed is returned as `verified: false` instead of being quoted from memory.
+- **Rules can go stale.** Each citation is re-fetched and matched at call time. A rule whose sentence Apple has changed, or whose locator now matches more than one sentence, is returned as `verified: false` with no quote. If Apple can't be reached and only an expired cached copy exists, citations are marked `source: "stale-cache"` with the copy's date and are not reported as verified.
+- **Platform scope follows Apple's pages.** A rule only claims the platforms its source page lists. For example, the Dark Mode rules don't apply to watchOS or visionOS.
 - **Not affiliated with Apple.** HIG conformance is not App Store approval.
 
 For general Apple developer documentation, a docs-lookup tool such as [sosumi.ai](https://sosumi.ai) pairs well with this one. Xcode's own documentation search is another option. hig-review focuses on design review.
@@ -120,7 +121,7 @@ For general Apple developer documentation, a docs-lookup tool such as [sosumi.ai
 - **Data source:** each HIG page is backed by a JSON document (`https://developer.apple.com/tutorials/data/design/human-interface-guidelines/<page>.json`), the same data the site renders. The server fetches it directly. No browser is needed.
 - **Citations:** a page is flattened into sentences and table rows, each tagged with its section. A rule's short locator phrase finds the sentence to quote and the `#anchor` to link.
 - **Polite fetching:** the server sends a descriptive `User-Agent` and makes one request at a time with a minimum gap. It retries with backoff and caches responses for 24 hours, in memory and on disk at `~/.cache/hig-review`, outside the repository. A full checklist touches at most 21 pages.
-- **Offline:** if Apple is unreachable, a stale cached copy is served when one exists. Otherwise citations come back unverified, and contrast and SwiftUI checks still work.
+- **Offline:** if Apple is unreachable, a stale cached copy is served when one exists, and citations from it are marked unverified with their date. Otherwise citations come back unverified, and contrast and SwiftUI checks still work.
 
 Environment variables (all optional):
 
@@ -141,6 +142,7 @@ npm run bundle           # esbuild -> plugin/server.mjs (commit the result)
 npm run smoke            # every tool over stdio against the live site, plus live re-verification of every rule phrase
 npm run smoke:bundle     # the same, against an isolated copy of plugin/server.mjs
 npm run validate:plugin  # offline check of the plugin and marketplace files
+npm run docs:rules       # regenerate docs/RULES.md from the registry (a test checks it)
 claude plugin validate --strict .
 ```
 

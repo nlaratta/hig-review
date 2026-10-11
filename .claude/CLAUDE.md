@@ -27,10 +27,13 @@ claude plugin validate --strict .
   confirmed on that page (run `npm run smoke`). Paraphrase `check` in our own words; never paste
   Apple's sentences into the repo. Phrases are short locator fragments (a few words, max 60 chars, enforced by tests) and must match
   exactly one sentence on the page (smoke fails on ambiguous phrases).
-- A rule sourced from a platform-specific section ("watchOS", "iOS, iPadOS") must be scoped to those
-  platforms; the smoke test enforces it.
+- A rule may only claim platforms its source page lists in `supported-platforms` and that any
+  platform-specific heading above the sentence ("watchOS", "iOS, iPadOS") covers; numbers in `check`
+  must be backed by `data` (and appear in the cited text). Tests and the smoke test enforce this.
+- Paraphrases keep Apple's hedges: "consider", "prefer" and "ideally" never become "must".
+- `docs/RULES.md` is generated: run `npm run docs:rules` after changing rules or heuristics.
 - Every SwiftUI heuristic needs positive and negative fixtures in `tests/fixtures/swiftui.ts`
-  (synthetic code only) and a row in `docs/RULES.md` (a test checks both).
+  (synthetic code only).
 - After changing `src/`, run `npm run bundle` and commit `plugin/server.mjs` and
   `plugin/THIRD_PARTY_LICENSES.txt`.
 - stdout belongs to the MCP stdio transport. Log only through `src/utils/logger.ts` (stderr).

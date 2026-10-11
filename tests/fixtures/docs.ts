@@ -23,13 +23,13 @@ export const foundationsDoc: HIGDoc = {
 export const componentsDoc: HIGDoc = {
   topicSections: [{ identifiers: [id('buttons'), id('menus')] }],
   references: {
-    [id('buttons')]: { title: 'Buttons', abstract: text('A button initiates an instantaneous action.'), role: 'article', url: '/design/human-interface-guidelines/buttons' },
-    [id('menus')]: { title: 'Menus', abstract: text('A menu reveals its options on demand.'), role: 'article', url: '/design/human-interface-guidelines/menus' },
+    [id('buttons')]: { title: 'Buttons', abstract: text('A sample control starts a speedy task.'), role: 'article', url: '/design/human-interface-guidelines/buttons' },
+    [id('menus')]: { title: 'Menus', abstract: text('A sample list of commands and actions.'), role: 'article', url: '/design/human-interface-guidelines/menus' },
   },
 };
 
 export const buttonsDoc: HIGDoc = {
-  abstract: text('A button initiates an instantaneous action.'),
+  abstract: text('A sample control starts a speedy task.'),
   metadata: { title: 'Buttons', customMetadata: { 'supported-platforms': 'ios,macos' } },
   hierarchy: { paths: [['doc://com.apple.documentation/documentation/technologies', 'doc://com.apple.HIG/design/human-interface-guidelines', id('components')]] },
   primaryContentSections: [

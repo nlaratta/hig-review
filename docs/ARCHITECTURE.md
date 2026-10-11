@@ -52,8 +52,9 @@ A page document contains:
 - `citation.ts`:
   - `flattenDoc` turns a page into text units: sentences of paragraphs, list items and asides, and table rows joined with ` | ` plus their header row. Each unit is tagged with its heading path and anchor.
   - `normalize` folds curly quotes, dashes and odd spaces, so locator phrases survive typography.
-  - `citeFromDoc` returns the first unit containing the phrase as `{ verified: true, page, url#anchor, section, quote }`. If no unit contains it, it returns `{ verified: false, note }` with no quote, so stale wording is never quoted from memory.
-  - `Citer` wraps `HIGClient`. A fetch failure also produces `verified: false`.
+  - `citeFromDoc` requires exactly one unit to contain the phrase. It then returns `{ verified: true, page, url#anchor, section, quote }`. With no match, or more than one, it returns `{ verified: false, note }` with no quote, so stale or ambiguous wording is never quoted.
+  - `citeFromInfo` adds provenance from `HIGClient.getDocInfo`: `retrievedAt`, plus `source: "live"` or `"stale-cache"`. A match on a stale fallback copy (Apple unreachable, cache expired) keeps its quote but is `verified: false`, with a note naming the copy's date.
+  - `Citer` wraps `HIGClient` for one tool call. It memoizes every page, failures included, so an unreachable page is requested once per call. A fetch failure produces `verified: false`.
 - `checklist.ts`:
   - Resolves names to components: exact alias, then a multi-word partial match, then Fuse.js suggestions.
   - Selects the rules for those components and the platform, high severity first.
@@ -61,20 +62,33 @@ A page document contains:
 - `contrast.ts`:
   - Parses colors and computes WCAG 2.x relative luminance and contrast ratio.
   - A translucent foreground is composited over the background.
-  - A translucent background is composited over both white and black, and the worse ratio is reported.
+  - A translucent background needs an opaque `backdrop`. Without one, `compliance` is `"unknown"` and every pass/fail field is null. Scenarios over white and black are shown as illustrations only, because the real backdrop could be worse than either.
   - Pass/fail uses the unrounded ratio.
-  - The HIG categories come from the Accessibility page's table: text up to 17 pt needs 4.5:1, and 18 pt or bold text needs 3:1.
-- `verify.ts`: `checkRule` checks that the phrase matches exactly one sentence or table row, since an ambiguous fragment could quote the wrong sentence. It also detects platform-scoped headings ("watchOS", "iOS, iPadOS"); a rule whose sentence sits under one must not claim other platforms. `npm run smoke` runs this for every rule against the live pages.
+  - Verdicts are reported per source:
+    - `hig.accessibilityTable`: the Accessibility page's table. Non-bold text up to 17 pt needs 4.5:1; 18 pt and larger, and bold text of any size, need 3:1.
+    - `hig.darkModeMinimum`: 4.5:1 in every appearance.
+    - `hig.darkModePreferred`: 7:1, which is a target, not a minimum.
+  - WCAG AA/AAA results are reported separately.
+- `verify.ts`: `checkRule` checks four things:
+  - The phrase matches exactly one sentence or table row.
+  - The rule's platforms are covered by the page's `supported-platforms` and by any platform heading above the sentence ("watchOS", "iOS, iPadOS").
+  - Every number in the rule's `data` appears in the cited text. For table rows such as control and text sizes, it must be in the right column.
+  - `npm run smoke` runs this for every rule against the live pages.
+- `doc.ts`: renders `docs/RULES.md`. A unit test fails if the committed file differs.
 
 ### SwiftUI heuristics (`src/swift/`)
 
-- `lexer.ts`: `maskSwift` replaces comments with spaces and string contents with `x`. Offsets, line breaks and string delimiters are preserved. It handles nested block comments, multi-line strings, raw strings (`#"…"#`) and interpolation, including strings nested inside an interpolation. All pattern matching runs on the masked text.
+- `lexer.ts`:
+  - `maskSwift` replaces comments with spaces and string contents with `x`. Offsets, line breaks and string delimiters are preserved. It handles nested block comments, multi-line strings, raw strings (`#"…"#`) and interpolation, including strings and comments nested inside an interpolation.
+  - `maskInactivePlatforms` blanks `#if os(...)` branches that don't apply to the target platform. Conditions that aren't purely `os(...)` checks keep every branch.
+  - All pattern matching runs on the masked text.
 - `syntax.ts`: shallow structure on masked text:
   - calls with arguments and trailing closures (including `label:` closures)
   - modifier chains
   - walking back from a modifier to the head of its expression
-  - the call that encloses an offset (to tell a `.background { … }` argument from content)
-  - literal `.frame(width:height:)` sizes
+  - the calls that enclose an offset (to tell a `.background { … }` argument from content, or to spot a `scaledFont(for:)` wrapper)
+  - bounds from a chain: the last literal `.frame(width:height:)` plus literal padding after it. Non-literal padding leaves the bounds unresolved, and the finding becomes an advisory. For a label, only its single root view counts.
+  - `countBranchAware`: counts buttons or segments treating `if`/`else` branches as alternatives. `ForEach` and `switch` make the count unknown.
 - `heuristics.ts`: eleven checks. Each one maps to a registry rule and assigns a severity and a confidence. `HEURISTICS` documents what each check flags and its known false positives; that list feeds `docs/RULES.md`.
 - `review.ts`: input handling. It takes inline code or a `.swift` path, resolved against the server's working directory, with a 200 KB cap. It attaches citations and a summary, and adds a fixed note that heuristics can misfire.
 

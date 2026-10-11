@@ -53,7 +53,8 @@ export function inlineToText(nodes: InlineNode[] | undefined): string {
   if (!nodes) return '';
   return nodes
     .map((n) => {
-      if (n.type === 'text' || n.type === 'codeVoice') return n.text ?? '';
+      if (n.type === 'text') return n.text ?? '';
+      if (n.type === 'codeVoice') return String(n.code ?? n.text ?? '');
       if (n.type === 'reference') {
         return n.overridingTitle ?? n.overridingTitleInlineContent?.map((c) => c.text ?? '').join('') ?? '';
       }
